@@ -1,0 +1,56 @@
+import React from 'react';
+import { Package, Layers, Building2 } from 'lucide-react';
+import { useApp } from '../contexts/AppContext';
+
+export function Configuracoes() {
+  const { setCurrentView } = useApp();
+
+  const cards = [
+    {
+      icon: Package,
+      title: 'Gerenciar Materiais',
+      description: 'Cadastrar e gerenciar catálogo de materiais',
+      action: () => setCurrentView('materiais'),
+      color: 'bg-blue-600'
+    },
+    {
+      icon: Layers,
+      title: 'Gerenciar Grupos de Itens',
+      description: 'Criar e gerenciar kits de materiais por concessionária',
+      action: () => setCurrentView('grupos'),
+      color: 'bg-green-600'
+    },
+    {
+      icon: Building2,
+      title: 'Gerenciar Concessionárias',
+      description: 'Configurar concessionárias do sistema',
+      action: () => alert('Funcionalidade em desenvolvimento'),
+      color: 'bg-purple-600'
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Configurações do Sistema</h2>
+        <p className="text-gray-600">Gerencie os dados mestres do sistema de orçamentos.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {cards.map((card, index) => (
+          <div
+            key={index}
+            onClick={card.action}
+            className="bg-white rounded-lg shadow-sm border p-6 cursor-pointer hover:shadow-md transition-shadow"
+          >
+            <div className={`${card.color} w-12 h-12 rounded-lg flex items-center justify-center mb-4`}>
+              <card.icon className="h-6 w-6 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{card.title}</h3>
+            <p className="text-gray-600 text-sm">{card.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
