@@ -1,13 +1,34 @@
-import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash2, Upload } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Edit, Trash2, Upload, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Material } from '../types';
 
 export function GerenciarMateriais() {
-  const { materiais, addMaterial, updateMaterial, deleteMaterial } = useApp();
+  const { materiais, loadingMaterials, fetchMaterials, addMaterial, updateMaterial, deleteMaterial } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+  const [operationLoading, setOperationLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Buscar materiais quando o componente for montado
+  useEffect(() => {
+    fetchMaterials();
+  }, []);
+
+  // Auto-hide messages after 5 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+  };
 
   const filteredMateriais = materiais.filter(material =>
     material.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -15,19 +36,61 @@ export function GerenciarMateriais() {
   );
 
   const handleEdit = (material: Material) => {
+    if (operationLoading) return;
     setEditingMaterial(material);
     setShowModal(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    if (operationLoading) return;
+    
     if (confirm('Tem certeza que deseja excluir este material?')) {
-      deleteMaterial(id);
+      setOperationLoading(true);
+      try {
+        await deleteMaterial(id);
+        showMessage('success', 'Material excluído com sucesso!');
+      } catch (error) {
+        console.error('Erro ao excluir material:', error);
+        showMessage('error', 'Erro ao excluir material. Tente novamente.');
+      } finally {
+        setOperationLoading(false);
+      }
     }
   };
 
   const handleCloseModal = () => {
+    if (operationLoading) return;
     setShowModal(false);
     setEditingMaterial(null);
+  };
+
+  const handleRefresh = async () => {
+    if (operationLoading) return;
+    try {
+      await fetchMaterials();
+      showMessage('success', 'Lista de materiais atualizada!');
+    } catch (error) {
+      showMessage('error', 'Erro ao atualizar lista de materiais.');
+    }
+  };
+
+  const handleSaveMaterial = async (materialData: Omit<Material, 'id'>) => {
+    setOperationLoading(true);
+    try {
+      if (editingMaterial) {
+        await updateMaterial(editingMaterial.id, materialData);
+        showMessage('success', 'Material atualizado com sucesso!');
+      } else {
+        await addMaterial(materialData);
+        showMessage('success', 'Material adicionado com sucesso!');
+      }
+      handleCloseModal();
+    } catch (error) {
+      console.error('Erro ao salvar material:', error);
+      showMessage('error', 'Erro ao salvar material. Tente novamente.');
+    } finally {
+      setOperationLoading(false);
+    }
   };
 
   return (
@@ -38,19 +101,54 @@ export function GerenciarMateriais() {
           <p className="text-gray-600">Cadastre e gerencie o catálogo completo de materiais</p>
         </div>
         <div className="flex space-x-3">
-          <button className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+          <button 
+            onClick={handleRefresh}
+            disabled={loadingMaterials || operationLoading}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMaterials ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Search className="h-5 w-5" />
+            )}
+            <span>Atualizar</span>
+          </button>
+          <button 
+            disabled={operationLoading}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Upload className="h-5 w-5" />
             <span>Importar Planilha</span>
           </button>
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            disabled={operationLoading}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="h-5 w-5" />
             <span>Novo Material</span>
           </button>
         </div>
       </div>
+
+      {/* Message feedback */}
+      {message && (
+        <div className={`p-4 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-green-50 text-green-700 border border-green-200' 
+            : 'bg-red-50 text-red-700 border border-red-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <p>{message.text}</p>
+            <button
+              onClick={() => setMessage(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow">
         <div className="p-4 border-b">
@@ -66,68 +164,95 @@ export function GerenciarMateriais() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Código
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Descrição
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Preço Unit.
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Unidade
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredMateriais.map((material) => (
-                <tr key={material.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {material.codigo}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {material.descricao}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    R$ {material.precoUnit.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {material.unidade}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      onClick={() => handleEdit(material)}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(material.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredMateriais.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">
-              {searchTerm ? 'Nenhum material encontrado.' : 'Nenhum material cadastrado.'}
-            </p>
+        {/* Loading State */}
+        {loadingMaterials ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="flex flex-col items-center space-y-3">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <p className="text-gray-500">Carregando materiais...</p>
+            </div>
           </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Código
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Descrição
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Preço Unit.
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Unidade
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredMateriais.map((material) => (
+                    <tr key={material.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {material.codigo}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {material.descricao}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        R$ {material.precoUnit.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {material.unidade}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                        <button
+                          onClick={() => handleEdit(material)}
+                          disabled={operationLoading}
+                          className="text-blue-600 hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(material.id)}
+                          disabled={operationLoading}
+                          className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {operationLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Empty State */}
+            {filteredMateriais.length === 0 && !loadingMaterials && (
+              <div className="text-center py-12">
+                <p className="text-gray-500">
+                  {searchTerm ? 'Nenhum material encontrado.' : 'Nenhum material cadastrado.'}
+                </p>
+                {!searchTerm && (
+                  <button
+                    onClick={() => setShowModal(true)}
+                    className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Cadastrar primeiro material
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -135,14 +260,8 @@ export function GerenciarMateriais() {
         <MaterialModal
           material={editingMaterial}
           onClose={handleCloseModal}
-          onSave={(material) => {
-            if (editingMaterial) {
-              updateMaterial(editingMaterial.id, material);
-            } else {
-              addMaterial(material);
-            }
-            handleCloseModal();
-          }}
+          onSave={handleSaveMaterial}
+          loading={operationLoading}
         />
       )}
     </div>
@@ -152,10 +271,11 @@ export function GerenciarMateriais() {
 interface MaterialModalProps {
   material: Material | null;
   onClose: () => void;
-  onSave: (material: Omit<Material, 'id'>) => void;
+  onSave: (material: Omit<Material, 'id'>) => Promise<void>;
+  loading?: boolean;
 }
 
-function MaterialModal({ material, onClose, onSave }: MaterialModalProps) {
+function MaterialModal({ material, onClose, onSave, loading = false }: MaterialModalProps) {
   const [formData, setFormData] = useState({
     codigo: material?.codigo || '',
     descricao: material?.descricao || '',
@@ -163,7 +283,7 @@ function MaterialModal({ material, onClose, onSave }: MaterialModalProps) {
     unidade: material?.unidade || '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.codigo.trim() || !formData.descricao.trim() || !formData.unidade.trim()) {
@@ -171,7 +291,7 @@ function MaterialModal({ material, onClose, onSave }: MaterialModalProps) {
       return;
     }
 
-    onSave(formData);
+    await onSave(formData);
   };
 
   return (
@@ -246,15 +366,18 @@ function MaterialModal({ material, onClose, onSave }: MaterialModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              disabled={loading}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={loading}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Salvar
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{loading ? 'Salvando...' : 'Salvar'}</span>
             </button>
           </div>
         </form>
