@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Plus, Minus, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Plus, Minus, Save, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Material } from '../types';
 
@@ -9,12 +9,47 @@ interface MaterialGrupo {
 }
 
 export function EditorGrupo() {
-  const { materiais, concessionarias, addGrupoItem, setCurrentView } = useApp();
+  const { 
+    materiais, 
+    utilityCompanies, 
+    currentGroup, 
+    addGroup, 
+    updateGroup, 
+    setCurrentView,
+    setCurrentGroup,
+    fetchMaterials 
+  } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [nomeGrupo, setNomeGrupo] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [concessionariaId, setConcessionariaId] = useState(concessionarias[0]?.id || '');
+  const [concessionariaId, setConcessionariaId] = useState('');
   const [materiaisGrupo, setMateriaisGrupo] = useState<MaterialGrupo[]>([]);
+  const [saving, setSaving] = useState(false);
+  
+  // Inicializar campos quando o componente monta ou grupo muda
+  useEffect(() => {
+    if (currentGroup) {
+      // Modo edição - preencher campos com dados do grupo
+      setNomeGrupo(currentGroup.nome);
+      setDescricao(currentGroup.descricao || '');
+      setConcessionariaId(currentGroup.concessionariaId);
+      setMateriaisGrupo(currentGroup.materiais.map(m => ({
+        materialId: m.materialId,
+        quantidade: m.quantidade
+      })));
+    } else {
+      // Modo criação - limpar campos
+      setNomeGrupo('');
+      setDescricao('');
+      setConcessionariaId(utilityCompanies[0]?.id || '');
+      setMateriaisGrupo([]);
+    }
+  }, [currentGroup, utilityCompanies]);
+
+  // Buscar materiais quando componente monta
+  useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
 
   const materiaisFiltrados = materiais.filter(material =>
     material.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -44,7 +79,7 @@ export function EditorGrupo() {
     ));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!nomeGrupo.trim()) {
       alert('Por favor, digite um nome para o grupo.');
       return;
@@ -55,15 +90,41 @@ export function EditorGrupo() {
       return;
     }
 
-    const novoGrupo = {
-      nome: nomeGrupo.trim(),
-      descricao: descricao.trim(),
-      concessionariaId,
-      materiais: materiaisGrupo.map(mg => ({ materialId: mg.materialId, quantidade: mg.quantidade }))
-    };
+    if (!concessionariaId) {
+      alert('Por favor, selecione uma concessionária.');
+      return;
+    }
 
-    addGrupoItem(novoGrupo);
-    setCurrentView('grupos');
+    try {
+      setSaving(true);
+
+      const groupData = {
+        name: nomeGrupo.trim(),
+        description: descricao.trim() || undefined,
+        company_id: concessionariaId,
+        materials: materiaisGrupo.map(mg => ({ 
+          material_id: mg.materialId, 
+          quantity: mg.quantidade 
+        }))
+      };
+
+      if (currentGroup) {
+        // Modo edição
+        await updateGroup(currentGroup.id, groupData);
+      } else {
+        // Modo criação
+        await addGroup(groupData);
+      }
+
+      // Limpar estado do grupo atual e voltar à tela de grupos
+      setCurrentGroup(null);
+      setCurrentView('grupos');
+    } catch (error) {
+      console.error('Erro ao salvar grupo:', error);
+      alert('Erro ao salvar grupo. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -82,6 +143,7 @@ export function EditorGrupo() {
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar material..."
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={saving}
           />
         </div>
 
@@ -104,9 +166,9 @@ export function EditorGrupo() {
               </div>
               <button
                 onClick={() => handleAddMaterial(material)}
-                disabled={materiaisGrupo.some(mg => mg.materialId === material.id)}
+                disabled={materiaisGrupo.some(mg => mg.materialId === material.id) || saving}
                 className={`p-1 rounded-full transition-colors ${
-                  materiaisGrupo.some(mg => mg.materialId === material.id)
+                  materiaisGrupo.some(mg => mg.materialId === material.id) || saving
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
@@ -121,7 +183,7 @@ export function EditorGrupo() {
       {/* Painel Direito - Composição do Grupo */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Composição do Grupo
+          {currentGroup ? `Editar Grupo: ${currentGroup.nome}` : 'Novo Grupo de Itens'}
         </h3>
 
         <div className="space-y-4 mb-6">
@@ -135,6 +197,7 @@ export function EditorGrupo() {
               onChange={(e) => setNomeGrupo(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Digite o nome do grupo"
+              disabled={saving}
               required
             />
           </div>
@@ -149,6 +212,7 @@ export function EditorGrupo() {
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Descreva o grupo de itens"
+              disabled={saving}
             />
           </div>
 
@@ -161,8 +225,10 @@ export function EditorGrupo() {
               onChange={(e) => setConcessionariaId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
+              disabled={saving}
             >
-              {concessionarias.map((concessionaria) => (
+              <option value="">Selecione uma concessionária</option>
+              {utilityCompanies.map((concessionaria) => (
                 <option key={concessionaria.id} value={concessionaria.id}>
                   {concessionaria.nome}
                 </option>
@@ -227,13 +293,34 @@ export function EditorGrupo() {
           )}
         </div>
 
-        <div className="mt-6 pt-4 border-t">
+        <div className="mt-6 pt-4 border-t space-y-3">
           <button
             onClick={handleSave}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            disabled={saving}
+            className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="h-5 w-5" />
-            <span>Salvar Grupo de Itens</span>
+            {saving ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Save className="h-5 w-5" />
+            )}
+            <span>
+              {saving 
+                ? (currentGroup ? 'Atualizando...' : 'Salvando...') 
+                : (currentGroup ? 'Atualizar Grupo' : 'Salvar Grupo de Itens')
+              }
+            </span>
+          </button>
+          
+          <button
+            onClick={() => {
+              setCurrentGroup(null);
+              setCurrentView('grupos');
+            }}
+            disabled={saving}
+            className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancelar
           </button>
         </div>
       </div>

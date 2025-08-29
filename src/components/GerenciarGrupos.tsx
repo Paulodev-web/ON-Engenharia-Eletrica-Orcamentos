@@ -1,33 +1,90 @@
-import React, { useState } from 'react';
-import { Plus, Edit, Trash2, Filter } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Filter, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { GrupoItem } from '../types';
 
 export function GerenciarGrupos() {
-  const { gruposItens, concessionarias, deleteGrupoItem, setCurrentView } = useApp();
-  const [selectedConcessionaria, setSelectedConcessionaria] = useState<string>(concessionarias[0]?.id || '');
+  const { 
+    utilityCompanies, 
+    itemGroups, 
+    loadingCompanies, 
+    loadingGroups,
+    fetchUtilityCompanies, 
+    fetchItemGroups, 
+    deleteGroup,
+    setCurrentView,
+    setCurrentGroup
+  } = useApp();
+  const [selectedConcessionaria, setSelectedConcessionaria] = useState<string>('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const gruposFiltrados = gruposItens.filter(grupo => 
-    grupo.concessionariaId === selectedConcessionaria
-  );
+  // Carregar concessionárias na montagem do componente
+  useEffect(() => {
+    fetchUtilityCompanies();
+  }, [fetchUtilityCompanies]); // Função memoizada não causa loop
+
+  // Definir primeira concessionária como selecionada quando carregadas
+  useEffect(() => {
+    if (utilityCompanies.length > 0 && !selectedConcessionaria) {
+      setSelectedConcessionaria(utilityCompanies[0].id);
+    }
+  }, [utilityCompanies, selectedConcessionaria]);
+
+  // Carregar grupos quando concessionária for selecionada
+  useEffect(() => {
+    if (selectedConcessionaria) {
+      fetchItemGroups(selectedConcessionaria);
+    }
+  }, [selectedConcessionaria, fetchItemGroups]); // Função memoizada não causa loop
+
+  const gruposFiltrados = itemGroups;
 
   const handleEdit = (grupo: GrupoItem) => {
-    // Implementar navegação para editor com grupo selecionado
+    setCurrentGroup(grupo);
     setCurrentView('editor-grupo');
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este grupo de itens?')) {
-      deleteGrupoItem(id);
+      try {
+        setDeletingId(id);
+        await deleteGroup(id);
+        // fetchItemGroups será chamado automaticamente dentro de deleteGroup
+      } catch (error) {
+        console.error('Erro ao excluir grupo:', error);
+        alert('Erro ao excluir grupo. Tente novamente.');
+      } finally {
+        setDeletingId(null);
+      }
     }
   };
 
   const handleNovoGrupo = () => {
-    // Implementar criação de novo grupo
+    setCurrentGroup(null); // Limpar grupo atual para modo criação
     setCurrentView('editor-grupo');
   };
 
-  const concessionariaSelecionada = concessionarias.find(c => c.id === selectedConcessionaria);
+  // Early return: Se estiver carregando concessionárias, mostrar apenas spinner
+  if (loadingCompanies) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Gerenciar Grupos de Itens</h2>
+            <p className="text-gray-600">Crie e gerencie kits de materiais por concessionária</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-12 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+            <p className="text-gray-500">Carregando concessionárias...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const concessionariaSelecionada = utilityCompanies.find(c => c.id === selectedConcessionaria);
 
   return (
     <div className="space-y-6">
@@ -56,56 +113,74 @@ export function GerenciarGrupos() {
               value={selectedConcessionaria}
               onChange={(e) => setSelectedConcessionaria(e.target.value)}
               className="px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              disabled={utilityCompanies.length === 0}
             >
-              {concessionarias.map((concessionaria) => (
-                <option key={concessionaria.id} value={concessionaria.id}>
-                  {concessionaria.sigla}
-                </option>
-              ))}
+              {utilityCompanies.length === 0 ? (
+                <option value="">Nenhuma concessionária encontrada</option>
+              ) : (
+                utilityCompanies.map((concessionaria) => (
+                  <option key={concessionaria.id} value={concessionaria.id}>
+                    {concessionaria.sigla}
+                  </option>
+                ))
+              )}
             </select>
           </div>
         </div>
 
         <div className="divide-y divide-gray-200">
-          {gruposFiltrados.map((grupo) => (
-            <div key={grupo.id} className="p-6 hover:bg-gray-50 transition-colors">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    {grupo.nome}
-                  </h3>
-                  <p className="text-gray-600 text-sm mb-3">
-                    {grupo.descricao}
-                  </p>
-                  <div className="flex items-center text-sm text-gray-500">
-                    <span className="bg-gray-100 px-2 py-1 rounded-full">
-                      {grupo.materiais.length} materiais
-                    </span>
-                    <span className="ml-3">
-                      {concessionariaSelecionada?.sigla}
-                    </span>
+          {loadingGroups ? (
+            <div className="p-12 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+              <p className="text-gray-500">Carregando grupos de itens...</p>
+            </div>
+          ) : (
+            gruposFiltrados.map((grupo) => (
+              <div key={grupo.id} className="p-6 hover:bg-gray-50 transition-colors">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      {grupo.nome}
+                    </h3>
+                    <p className="text-gray-600 text-sm mb-3">
+                      {grupo.descricao}
+                    </p>
+                    <div className="flex items-center text-sm text-gray-500">
+                      <span className="bg-gray-100 px-2 py-1 rounded-full">
+                        {grupo.materiais.length} materiais
+                      </span>
+                      <span className="ml-3">
+                        {concessionariaSelecionada?.sigla}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex space-x-2 ml-4">
+                    <button
+                      onClick={() => handleEdit(grupo)}
+                      disabled={deletingId === grupo.id}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(grupo.id)}
+                      disabled={deletingId === grupo.id}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deletingId === grupo.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
-                <div className="flex space-x-2 ml-4">
-                  <button
-                    onClick={() => handleEdit(grupo)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(grupo.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
-        {gruposFiltrados.length === 0 && (
+        {!loadingGroups && gruposFiltrados.length === 0 && selectedConcessionaria && (
           <div className="text-center py-12">
             <p className="text-gray-500 mb-4">
               Nenhum grupo de itens encontrado para {concessionariaSelecionada?.sigla}.
