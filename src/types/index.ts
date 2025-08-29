@@ -45,10 +45,62 @@ export interface Orcamento {
   status: 'Em Andamento' | 'Finalizado';
   imagemPlanta?: string;
   postes: Poste[];
+  clientName?: string;
+  city?: string;
 }
 
 export interface MaterialConsolidado {
   material: Material;
   quantidade: number;
   precoTotal: number;
+}
+
+// Tipos para catálogo de tipos de poste
+export interface PostType {
+  id: string;
+  name: string;
+  code?: string;
+  description?: string;
+  shape?: string;
+  height_m?: number;
+  price: number;
+}
+
+// Tipos para dados detalhados do banco de dados
+export interface BudgetPostDetail {
+  id: string;
+  name: string;
+  x_coord: number;
+  y_coord: number;
+  post_types: {
+    id: string;
+    name: string;
+    code?: string;
+    description?: string;
+    shape?: string;
+    height_m?: number;
+    price: number;
+  } | null;
+  post_item_groups: PostItemGroupDetail[];
+}
+
+export interface PostItemGroupDetail {
+  id: string;
+  name: string;
+  template_id?: string;
+  post_item_group_materials: PostItemGroupMaterial[];
+}
+
+export interface PostItemGroupMaterial {
+  material_id: string;
+  quantity: number;
+  price_at_addition: number;
+  materials: {
+    id: string;
+    code: string;
+    name: string;
+    description?: string;
+    unit: string;
+    price: number;
+  };
 }

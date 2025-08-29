@@ -1,16 +1,23 @@
 import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { Material, GrupoItem, Concessionaria, Orcamento } from '../types';
+import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, PostType } from '../types';
 import { gruposItens as initialGrupos, concessionarias, orcamentos as initialOrcamentos } from '../data/mockData';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from './AuthContext';
 
 interface AppContextType {
   materiais: Material[];
   gruposItens: GrupoItem[];
   concessionarias: Concessionaria[];
   orcamentos: Orcamento[];
+  budgets: Orcamento[];
+  budgetDetails: BudgetPostDetail[] | null;
+  postTypes: PostType[];
   currentOrcamento: Orcamento | null;
   currentView: string;
   loadingMaterials: boolean;
+  loadingBudgets: boolean;
+  loadingBudgetDetails: boolean;
+  loadingPostTypes: boolean;
   
   // Novos estados para gerenciar grupos
   utilityCompanies: Concessionaria[];
@@ -28,6 +35,19 @@ interface AppContextType {
   addMaterial: (material: Omit<Material, 'id'>) => Promise<void>;
   updateMaterial: (id: string, material: Omit<Material, 'id'>) => Promise<void>;
   deleteMaterial: (id: string) => Promise<void>;
+  
+  // Funções de orçamentos
+  fetchBudgets: () => Promise<void>;
+  addBudget: (budgetData: { project_name: string; client_name?: string; city?: string; }) => Promise<void>;
+  fetchBudgetDetails: (budgetId: string) => Promise<void>;
+  
+  // Funções de tipos de poste
+  fetchPostTypes: () => Promise<void>;
+  addPostToBudget: (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => Promise<void>;
+  addGroupToPost: (groupId: string, postId: string) => Promise<void>;
+  deletePostFromBudget: (postId: string) => Promise<void>;
+  removeGroupFromPost: (postGroupId: string) => Promise<void>;
+  updateMaterialQuantityInPostGroup: (postGroupId: string, materialId: string, newQuantity: number) => Promise<void>;
   
   // Funções para concessionárias e grupos
   fetchUtilityCompanies: () => Promise<void>;
@@ -47,12 +67,19 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [materiais, setMateriais] = useState<Material[]>([]);
   const [gruposItens, setGruposItens] = useState<GrupoItem[]>(initialGrupos);
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>(initialOrcamentos);
+  const [budgets, setBudgets] = useState<Orcamento[]>([]);
+  const [budgetDetails, setBudgetDetails] = useState<BudgetPostDetail[] | null>(null);
+  const [postTypes, setPostTypes] = useState<PostType[]>([]);
   const [currentOrcamento, setCurrentOrcamento] = useState<Orcamento | null>(null);
   const [currentView, setCurrentView] = useState<string>('dashboard');
   const [loadingMaterials, setLoadingMaterials] = useState<boolean>(false);
+  const [loadingBudgets, setLoadingBudgets] = useState<boolean>(false);
+  const [loadingBudgetDetails, setLoadingBudgetDetails] = useState<boolean>(false);
+  const [loadingPostTypes, setLoadingPostTypes] = useState<boolean>(false);
   
   // Novos estados para gerenciar grupos
   const [utilityCompanies, setUtilityCompanies] = useState<Concessionaria[]>([]);
@@ -200,6 +227,539 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMateriais(prev => prev.filter(m => m.id !== id));
     } catch (error) {
       console.error('Erro ao excluir material:', error);
+      throw error;
+    }
+  };
+
+  // Funções para orçamentos
+  const fetchBudgets = useCallback(async () => {
+    if (!user) {
+      console.log('Usuário não autenticado, não é possível buscar orçamentos');
+      return;
+    }
+
+    try {
+      setLoadingBudgets(true);
+      console.log('Buscando orçamentos do Supabase...');
+      
+      const { data, error } = await supabase
+        .from('budgets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro ao buscar orçamentos:', error);
+        throw error;
+      }
+
+      console.log('Orçamentos encontrados:', data);
+
+      // Mapear os dados do banco para o formato do frontend
+      const orcamentosFormatados: Orcamento[] = data?.map(item => ({
+        id: item.id,
+        nome: item.project_name || '',
+        concessionariaId: '', // Será implementado quando conectarmos as concessionárias
+        dataModificacao: item.updated_at ? new Date(item.updated_at).toISOString().split('T')[0] : '',
+        status: item.status as 'Em Andamento' | 'Finalizado',
+        postes: [], // Será implementado quando conectarmos os postes
+        ...(item.client_name && { clientName: item.client_name }),
+        ...(item.city && { city: item.city }),
+      })) || [];
+
+      setBudgets(orcamentosFormatados);
+    } catch (error) {
+      console.error('Erro ao buscar orçamentos:', error);
+      setBudgets([]);
+    } finally {
+      setLoadingBudgets(false);
+    }
+  }, [user]);
+
+  const addBudget = async (budgetData: { project_name: string; client_name?: string; city?: string; }) => {
+    if (!user) {
+      console.log('Usuário não autenticado, não é possível criar orçamento');
+      return;
+    }
+
+    try {
+      console.log('Adicionando orçamento:', budgetData);
+      
+      const { data, error } = await supabase
+        .from('budgets')
+        .insert({
+          project_name: budgetData.project_name,
+          client_name: budgetData.client_name || null,
+          city: budgetData.city || null,
+          user_id: user.id,
+          status: 'Em Andamento',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao adicionar orçamento:', error);
+        throw error;
+      }
+
+      console.log('Orçamento adicionado com sucesso:', data);
+
+      // Mapear dados do banco para o formato do frontend e adicionar ao estado
+      const newBudget: Orcamento = {
+        id: data.id,
+        nome: data.project_name || '',
+        concessionariaId: '', // Será implementado quando conectarmos as concessionárias
+        dataModificacao: data.updated_at ? new Date(data.updated_at).toISOString().split('T')[0] : '',
+        status: data.status as 'Em Andamento' | 'Finalizado',
+        postes: [],
+        ...(data.client_name && { clientName: data.client_name }),
+        ...(data.city && { city: data.city }),
+      };
+
+      setBudgets(prev => [newBudget, ...prev]);
+      
+      // Definir como orçamento atual e mudar para a área de trabalho
+      setCurrentOrcamento(newBudget);
+      setCurrentView('orcamento');
+    } catch (error) {
+      console.error('Erro ao adicionar orçamento:', error);
+      throw error;
+    }
+  };
+
+  const fetchBudgetDetails = useCallback(async (budgetId: string) => {
+    try {
+      setLoadingBudgetDetails(true);
+      console.log('Buscando detalhes do orçamento:', budgetId);
+      
+      // Query aninhada para buscar todos os dados relacionados ao orçamento
+      const { data, error } = await supabase
+        .from('budget_posts')
+        .select(`
+          id,
+          name,
+          x_coord,
+          y_coord,
+          post_types (
+            id,
+            name,
+            code,
+            description,
+            shape,
+            height_m,
+            price
+          ),
+          post_item_groups (
+            id,
+            name,
+            template_id,
+            post_item_group_materials (
+              material_id,
+              quantity,
+              price_at_addition,
+              materials (
+                id,
+                code,
+                name,
+                description,
+                unit,
+                price
+              )
+            )
+          )
+        `)
+        .eq('budget_id', budgetId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao buscar detalhes do orçamento:', error);
+        throw error;
+      }
+
+      console.log('Detalhes do orçamento encontrados:', data);
+
+      // Mapear os dados para o tipo correto
+      const budgetDetailsFormatted: BudgetPostDetail[] = data?.map(post => ({
+        id: post.id,
+        name: post.name || '',
+        x_coord: post.x_coord || 0,
+        y_coord: post.y_coord || 0,
+        post_types: (post.post_types && Array.isArray(post.post_types) && post.post_types.length > 0) ? {
+          id: post.post_types[0].id,
+          name: post.post_types[0].name || '',
+          code: post.post_types[0].code || undefined,
+          description: post.post_types[0].description || undefined,
+          shape: post.post_types[0].shape || undefined,
+          height_m: post.post_types[0].height_m || undefined,
+          price: post.post_types[0].price || 0
+        } : null,
+        post_item_groups: post.post_item_groups?.map(group => ({
+          id: group.id,
+          name: group.name || '',
+          template_id: group.template_id || undefined,
+          post_item_group_materials: group.post_item_group_materials?.map(material => ({
+            material_id: material.material_id,
+            quantity: material.quantity || 0,
+            price_at_addition: material.price_at_addition || 0,
+            materials: (material.materials && Array.isArray(material.materials) && material.materials.length > 0) ? {
+              id: material.materials[0].id,
+              code: material.materials[0].code || '',
+              name: material.materials[0].name || '',
+              description: material.materials[0].description || undefined,
+              unit: material.materials[0].unit || '',
+              price: material.materials[0].price || 0
+            } : {
+              id: '',
+              code: '',
+              name: 'Material não encontrado',
+              description: undefined,
+              unit: '',
+              price: 0
+            }
+          })) || []
+        })) || []
+      })) || [];
+
+      setBudgetDetails(budgetDetailsFormatted);
+    } catch (error) {
+      console.error('Erro ao buscar detalhes do orçamento:', error);
+      setBudgetDetails(null);
+    } finally {
+      setLoadingBudgetDetails(false);
+    }
+  }, []);
+
+  const fetchPostTypes = useCallback(async () => {
+    try {
+      setLoadingPostTypes(true);
+      console.log('Buscando tipos de poste do Supabase...');
+      
+      const { data, error } = await supabase
+        .from('post_types')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao buscar tipos de poste:', error);
+        throw error;
+      }
+
+      console.log('Tipos de poste encontrados:', data);
+
+      // Mapear os dados do banco para o formato do frontend
+      const postTypesFormatted: PostType[] = data?.map(item => ({
+        id: item.id,
+        name: item.name || '',
+        code: item.code || undefined,
+        description: item.description || undefined,
+        shape: item.shape || undefined,
+        height_m: item.height_m || undefined,
+        price: parseFloat(item.price) || 0,
+      })) || [];
+
+      setPostTypes(postTypesFormatted);
+    } catch (error) {
+      console.error('Erro ao buscar tipos de poste:', error);
+      setPostTypes([]);
+    } finally {
+      setLoadingPostTypes(false);
+    }
+  }, []);
+
+  const addPostToBudget = async (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => {
+    try {
+      console.log('Adicionando poste ao orçamento:', newPostData);
+      
+      const { data, error } = await supabase
+        .from('budget_posts')
+        .insert({
+          budget_id: newPostData.budget_id,
+          post_type_id: newPostData.post_type_id,
+          name: newPostData.name,
+          x_coord: newPostData.x_coord,
+          y_coord: newPostData.y_coord,
+        })
+        .select(`
+          *,
+          post_types (
+            id,
+            name,
+            code,
+            description,
+            shape,
+            height_m,
+            price
+          )
+        `)
+        .single();
+
+      if (error) {
+        console.error('Erro ao adicionar poste:', error);
+        throw error;
+      }
+
+      console.log('Poste adicionado com sucesso:', data);
+
+      // Mapear o novo poste para o formato dos budgetDetails
+      const newPostDetail: BudgetPostDetail = {
+        id: data.id,
+        name: data.name || '',
+        x_coord: data.x_coord || 0,
+        y_coord: data.y_coord || 0,
+        post_types: data.post_types ? {
+          id: data.post_types.id,
+          name: data.post_types.name || '',
+          code: data.post_types.code || undefined,
+          description: data.post_types.description || undefined,
+          shape: data.post_types.shape || undefined,
+          height_m: data.post_types.height_m || undefined,
+          price: data.post_types.price || 0
+        } : null,
+        post_item_groups: [] // Novo poste não tem grupos ainda
+      };
+
+      // Adicionar o novo poste ao estado budgetDetails
+      setBudgetDetails(prev => prev ? [...prev, newPostDetail] : [newPostDetail]);
+    } catch (error) {
+      console.error('Erro ao adicionar poste:', error);
+      throw error;
+    }
+  };
+
+  const addGroupToPost = async (groupId: string, postId: string) => {
+    try {
+      console.log('Adicionando grupo ao poste:', { groupId, postId });
+      
+      // a. Primeiro, buscar os dados do template de grupo
+      const { data: groupTemplate, error: groupError } = await supabase
+        .from('item_group_templates')
+        .select('id, name, description')
+        .eq('id', groupId)
+        .single();
+
+      if (groupError) {
+        console.error('Erro ao buscar template do grupo:', groupError);
+        throw groupError;
+      }
+
+      console.log('Template do grupo encontrado:', groupTemplate);
+
+      // b. Criar novo registro na tabela post_item_groups
+      const { data: newGroupInstance, error: instanceError } = await supabase
+        .from('post_item_groups')
+        .insert({
+          budget_post_id: postId,
+          template_id: groupId,
+          name: groupTemplate.name,
+        })
+        .select('id')
+        .single();
+
+      if (instanceError) {
+        console.error('Erro ao criar instância do grupo:', instanceError);
+        throw instanceError;
+      }
+
+      console.log('Instância do grupo criada:', newGroupInstance);
+
+      // c. Buscar todos os materiais e suas quantidades do template
+      const { data: templateMaterials, error: materialsError } = await supabase
+        .from('template_materials')
+        .select(`
+          material_id,
+          quantity,
+          materials (
+            id,
+            code,
+            name,
+            description,
+            unit,
+            price
+          )
+        `)
+        .eq('template_id', groupId);
+
+      if (materialsError) {
+        console.error('Erro ao buscar materiais do template:', materialsError);
+        throw materialsError;
+      }
+
+      console.log('Materiais do template encontrados:', templateMaterials);
+
+      // d. Inserção em lote na tabela post_item_group_materials
+      if (templateMaterials && templateMaterials.length > 0) {
+        const groupMaterialsData = templateMaterials.map(templateMaterial => ({
+          post_item_group_id: newGroupInstance.id,
+          material_id: templateMaterial.material_id,
+          quantity: templateMaterial.quantity,
+          price_at_addition: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0] 
+            ? templateMaterial.materials[0].price 
+            : 0,
+        }));
+
+        const { error: batchInsertError } = await supabase
+          .from('post_item_group_materials')
+          .insert(groupMaterialsData);
+
+        if (batchInsertError) {
+          console.error('Erro ao inserir materiais do grupo:', batchInsertError);
+          throw batchInsertError;
+        }
+
+        console.log('Materiais do grupo inseridos com sucesso');
+      }
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+
+        return prev.map(post => {
+          if (post.id === postId) {
+            // Criar o novo grupo para adicionar ao poste
+            const newGroup = {
+              id: newGroupInstance.id,
+              name: groupTemplate.name,
+              template_id: groupId,
+              post_item_group_materials: templateMaterials?.map(templateMaterial => ({
+                material_id: templateMaterial.material_id,
+                quantity: templateMaterial.quantity,
+                price_at_addition: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
+                  ? templateMaterial.materials[0].price
+                  : 0,
+                materials: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
+                  ? templateMaterial.materials[0]
+                  : {
+                      id: '',
+                      code: '',
+                      name: 'Material não encontrado',
+                      description: undefined,
+                      unit: '',
+                      price: 0
+                    }
+              })) || []
+            };
+
+            return {
+              ...post,
+              post_item_groups: [...post.post_item_groups, newGroup]
+            };
+          }
+          return post;
+        });
+      });
+
+    } catch (error) {
+      console.error('Erro ao adicionar grupo ao poste:', error);
+      throw error;
+    }
+  };
+
+  const deletePostFromBudget = async (postId: string) => {
+    try {
+      console.log('Excluindo poste do orçamento:', postId);
+
+      const { error } = await supabase
+        .from('budget_posts')
+        .delete()
+        .eq('id', postId);
+
+      if (error) {
+        console.error('Erro ao excluir poste:', error);
+        throw error;
+      }
+
+      console.log('Poste excluído com sucesso:', postId);
+
+      // Atualizar o estado budgetDetails localmente removendo o poste
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+        return prev.filter(post => post.id !== postId);
+      });
+    } catch (error) {
+      console.error('Erro ao excluir poste:', error);
+      throw error;
+    }
+  };
+
+  const removeGroupFromPost = async (postGroupId: string) => {
+    try {
+      console.log('Removendo grupo do poste:', postGroupId);
+
+      const { error } = await supabase
+        .from('post_item_groups')
+        .delete()
+        .eq('id', postGroupId);
+
+      if (error) {
+        console.error('Erro ao remover grupo:', error);
+        throw error;
+      }
+
+      console.log('Grupo removido com sucesso:', postGroupId);
+
+      // Atualizar o estado budgetDetails localmente removendo o grupo
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+        return prev.map(post => ({
+          ...post,
+          post_item_groups: post.post_item_groups.filter(group => group.id !== postGroupId)
+        }));
+      });
+    } catch (error) {
+      console.error('Erro ao remover grupo:', error);
+      throw error;
+    }
+  };
+
+  const updateMaterialQuantityInPostGroup = async (postGroupId: string, materialId: string, newQuantity: number) => {
+    try {
+      console.log('Atualizando quantidade de material:', { postGroupId, materialId, newQuantity });
+
+      // Validar quantidade
+      if (newQuantity < 0) {
+        throw new Error('Quantidade não pode ser negativa');
+      }
+
+      const { error } = await supabase
+        .from('post_item_group_materials')
+        .update({ quantity: newQuantity })
+        .eq('post_item_group_id', postGroupId)
+        .eq('material_id', materialId);
+
+      if (error) {
+        console.error('Erro ao atualizar quantidade do material:', error);
+        throw error;
+      }
+
+      console.log('Quantidade do material atualizada com sucesso');
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+
+        return prev.map(post => ({
+          ...post,
+          post_item_groups: post.post_item_groups.map(group => {
+            if (group.id === postGroupId) {
+              return {
+                ...group,
+                post_item_group_materials: group.post_item_group_materials.map(material => {
+                  if (material.material_id === materialId) {
+                    return {
+                      ...material,
+                      quantity: newQuantity
+                    };
+                  }
+                  return material;
+                })
+              };
+            }
+            return group;
+          })
+        }));
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar quantidade do material:', error);
       throw error;
     }
   };
@@ -462,9 +1022,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       gruposItens,
       concessionarias,
       orcamentos,
+      budgets,
+      budgetDetails,
+      postTypes,
       currentOrcamento,
       currentView,
       loadingMaterials,
+      loadingBudgets,
+      loadingBudgetDetails,
+      loadingPostTypes,
       
       // Novos estados para gerenciar grupos
       utilityCompanies,
@@ -482,6 +1048,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addMaterial,
       updateMaterial,
       deleteMaterial,
+      
+      // Funções de orçamentos
+      fetchBudgets,
+      addBudget,
+      fetchBudgetDetails,
+      
+      // Funções de tipos de poste
+      fetchPostTypes,
+      addPostToBudget,
+      addGroupToPost,
+      deletePostFromBudget,
+      removeGroupFromPost,
+      updateMaterialQuantityInPostGroup,
       
       // Funções para concessionárias e grupos
       fetchUtilityCompanies,

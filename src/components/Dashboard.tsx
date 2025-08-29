@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
-import { Plus, Calendar, Building2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Calendar, Building2, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { CriarOrcamentoModal } from './modals/CriarOrcamentoModal';
 
 export function Dashboard() {
-  const { orcamentos, concessionarias, setCurrentView, setCurrentOrcamento } = useApp();
+  const { 
+    budgets, 
+    loadingBudgets, 
+    concessionarias, 
+    setCurrentView, 
+    setCurrentOrcamento, 
+    fetchBudgets 
+  } = useApp();
   const [showModal, setShowModal] = useState(false);
 
+  // Buscar orçamentos na montagem do componente
+  useEffect(() => {
+    fetchBudgets();
+  }, [fetchBudgets]);
+
   const handleAbrirOrcamento = (orcamentoId: string) => {
-    const orcamento = orcamentos.find(o => o.id === orcamentoId);
+    const orcamento = budgets.find(o => o.id === orcamentoId);
     if (orcamento) {
       setCurrentOrcamento(orcamento);
       setCurrentView('orcamento');
@@ -60,53 +72,77 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {orcamentos.map((orcamento) => (
-                <tr key={orcamento.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {orcamento.nome}
+              {loadingBudgets ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                      <span className="text-gray-500">Carregando orçamentos...</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Building2 className="h-4 w-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-900">
-                        {getConcessionariaNome(orcamento.concessionariaId)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-900">
-                        {formatDate(orcamento.dataModificacao)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      orcamento.status === 'Finalizado' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {orcamento.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleAbrirOrcamento(orcamento.id)}
-                      className="text-blue-600 hover:text-blue-900 font-medium"
-                    >
-                      Abrir
-                    </button>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                budgets.map((orcamento) => (
+                  <tr key={orcamento.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleAbrirOrcamento(orcamento.id)}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {orcamento.nome}
+                      </div>
+                      {orcamento.clientName && (
+                        <div className="text-sm text-gray-500">
+                          Cliente: {orcamento.clientName}
+                        </div>
+                      )}
+                      {orcamento.city && (
+                        <div className="text-sm text-gray-500">
+                          Cidade: {orcamento.city}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Building2 className="h-4 w-4 text-gray-400 mr-2" />
+                        <span className="text-sm text-gray-900">
+                          {getConcessionariaNome(orcamento.concessionariaId)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                        <span className="text-sm text-gray-900">
+                          {formatDate(orcamento.dataModificacao)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        orcamento.status === 'Finalizado' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {orcamento.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAbrirOrcamento(orcamento.id);
+                        }}
+                        className="text-blue-600 hover:text-blue-900 font-medium"
+                      >
+                        Abrir
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
         
-        {orcamentos.length === 0 && (
+        {!loadingBudgets && budgets.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-500">Nenhum orçamento encontrado.</p>
             <button

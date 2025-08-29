@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
 interface CriarOrcamentoModalProps {
@@ -8,34 +8,42 @@ interface CriarOrcamentoModalProps {
 }
 
 export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProps) {
-  const { concessionarias, addOrcamento, setCurrentOrcamento, setCurrentView } = useApp();
+  const { concessionarias, addBudget } = useApp();
   const [nome, setNome] = useState('');
-  const [concessionariaId, setConcessionariaId] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [city, setCity] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!nome.trim() || !concessionariaId) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+    if (!nome.trim()) {
+      alert('Por favor, preencha o nome do projeto.');
       return;
     }
 
-    const novoOrcamento = {
-      nome: nome.trim(),
-      concessionariaId,
-      dataModificacao: new Date().toISOString().split('T')[0],
-      status: 'Em Andamento' as const,
-      postes: [],
-    };
-
-    addOrcamento(novoOrcamento);
+    setIsSubmitting(true);
     
-    // Simular a criação do orçamento com ID
-    const orcamentoComId = { ...novoOrcamento, id: Date.now().toString() };
-    setCurrentOrcamento(orcamentoComId);
-    setCurrentView('orcamento');
-    
-    onClose();
+    try {
+      await addBudget({
+        project_name: nome.trim(),
+        client_name: clientName.trim() || undefined,
+        city: city.trim() || undefined,
+      });
+      
+      // Fechar o modal
+      onClose();
+      
+      // Limpar formulário
+      setNome('');
+      setClientName('');
+      setCity('');
+    } catch (error) {
+      console.error('Erro ao criar orçamento:', error);
+      alert('Erro ao criar orçamento. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -66,27 +74,38 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Digite o nome do projeto"
               required
+              disabled={isSubmitting}
             />
           </div>
 
           <div>
-            <label htmlFor="concessionaria" className="block text-sm font-medium text-gray-700 mb-1">
-              Selecione a Concessionária *
+            <label htmlFor="clientName" className="block text-sm font-medium text-gray-700 mb-1">
+              Nome do Cliente
             </label>
-            <select
-              id="concessionaria"
-              value={concessionariaId}
-              onChange={(e) => setConcessionariaId(e.target.value)}
+            <input
+              type="text"
+              id="clientName"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Selecione uma concessionária</option>
-              {concessionarias.map((concessionaria) => (
-                <option key={concessionaria.id} value={concessionaria.id}>
-                  {concessionaria.nome}
-                </option>
-              ))}
-            </select>
+              placeholder="Digite o nome do cliente (opcional)"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
+              Cidade
+            </label>
+            <input
+              type="text"
+              id="city"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Digite a cidade (opcional)"
+              disabled={isSubmitting}
+            />
           </div>
 
           <div className="flex justify-end space-x-3 mt-6">
@@ -94,14 +113,23 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
               type="button"
               onClick={onClose}
               className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              disabled={isSubmitting}
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isSubmitting}
             >
-              Criar e Iniciar Orçamento
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Criando...</span>
+                </>
+              ) : (
+                <span>Criar e Iniciar Orçamento</span>
+              )}
             </button>
           </div>
         </form>
