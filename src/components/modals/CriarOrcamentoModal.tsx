@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
@@ -8,17 +8,30 @@ interface CriarOrcamentoModalProps {
 }
 
 export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProps) {
-  const { concessionarias, addBudget } = useApp();
+  const { concessionarias, addBudget, utilityCompanies, fetchUtilityCompanies } = useApp();
   const [nome, setNome] = useState('');
   const [clientName, setClientName] = useState('');
   const [city, setCity] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Buscar empresas quando o modal abrir
+  useEffect(() => {
+    if (isOpen) {
+      fetchUtilityCompanies();
+    }
+  }, [isOpen, fetchUtilityCompanies]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!nome.trim()) {
       alert('Por favor, preencha o nome do projeto.');
+      return;
+    }
+
+    if (!selectedCompanyId) {
+      alert('Por favor, selecione uma concessionária.');
       return;
     }
 
@@ -29,6 +42,7 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
         project_name: nome.trim(),
         client_name: clientName.trim() || undefined,
         city: city.trim() || undefined,
+        company_id: selectedCompanyId,
       });
       
       // Fechar o modal
@@ -38,6 +52,7 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
       setNome('');
       setClientName('');
       setCity('');
+      setSelectedCompanyId('');
     } catch (error) {
       console.error('Erro ao criar orçamento:', error);
       alert('Erro ao criar orçamento. Tente novamente.');
@@ -106,6 +121,27 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
               placeholder="Digite a cidade (opcional)"
               disabled={isSubmitting}
             />
+          </div>
+
+          <div>
+            <label htmlFor="companyId" className="block text-sm font-medium text-gray-700 mb-1">
+              Concessionária *
+            </label>
+            <select
+              id="companyId"
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+              disabled={isSubmitting}
+            >
+              <option value="">Selecione uma concessionária</option>
+              {utilityCompanies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.nome}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex justify-end space-x-3 mt-6">

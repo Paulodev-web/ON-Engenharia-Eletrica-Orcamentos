@@ -18,6 +18,7 @@ interface AppContextType {
   loadingBudgets: boolean;
   loadingBudgetDetails: boolean;
   loadingPostTypes: boolean;
+  loadingUpload: boolean;
   
   // Novos estados para gerenciar grupos
   utilityCompanies: Concessionaria[];
@@ -38,8 +39,10 @@ interface AppContextType {
   
   // Funções de orçamentos
   fetchBudgets: () => Promise<void>;
-  addBudget: (budgetData: { project_name: string; client_name?: string; city?: string; }) => Promise<void>;
+  addBudget: (budgetData: { project_name: string; client_name?: string; city?: string; company_id: string; }) => Promise<void>;
   fetchBudgetDetails: (budgetId: string) => Promise<void>;
+  uploadPlanImage: (budgetId: string, file: File) => Promise<void>;
+  deletePlanImage: (budgetId: string) => Promise<void>;
   
   // Funções de tipos de poste
   fetchPostTypes: () => Promise<void>;
@@ -80,6 +83,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loadingBudgets, setLoadingBudgets] = useState<boolean>(false);
   const [loadingBudgetDetails, setLoadingBudgetDetails] = useState<boolean>(false);
   const [loadingPostTypes, setLoadingPostTypes] = useState<boolean>(false);
+  const [loadingUpload, setLoadingUpload] = useState<boolean>(false);
   
   // Novos estados para gerenciar grupos
   const [utilityCompanies, setUtilityCompanies] = useState<Concessionaria[]>([]);
@@ -244,9 +248,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       const { data, error } = await supabase
         .from('budgets')
-        .select('*')
+        .select('*, plan_image_url')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
+
+      console.log('[DEBUG] Dados brutos do banco (budgets):', data);
 
       if (error) {
         console.error('Erro ao buscar orçamentos:', error);
@@ -254,18 +260,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       console.log('Orçamentos encontrados:', data);
+      console.log('[DEBUG] Primeiro orçamento com company_id:', data?.[0]?.company_id);
 
       // Mapear os dados do banco para o formato do frontend
       const orcamentosFormatados: Orcamento[] = data?.map(item => ({
         id: item.id,
         nome: item.project_name || '',
-        concessionariaId: '', // Será implementado quando conectarmos as concessionárias
+        concessionariaId: item.company_id || '', // Usar company_id do banco
+        company_id: item.company_id, // ID da empresa no Supabase
         dataModificacao: item.updated_at ? new Date(item.updated_at).toISOString().split('T')[0] : '',
         status: item.status as 'Em Andamento' | 'Finalizado',
         postes: [], // Será implementado quando conectarmos os postes
         ...(item.client_name && { clientName: item.client_name }),
         ...(item.city && { city: item.city }),
+        ...(item.plan_image_url && { imagemPlanta: item.plan_image_url }),
       })) || [];
+
+      console.log('[DEBUG] Orçamentos formatados com company_id:', orcamentosFormatados.map(o => ({ id: o.id, nome: o.nome, company_id: o.company_id })));
 
       setBudgets(orcamentosFormatados);
     } catch (error) {
@@ -276,7 +287,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  const addBudget = async (budgetData: { project_name: string; client_name?: string; city?: string; }) => {
+  const addBudget = async (budgetData: { project_name: string; client_name?: string; city?: string; company_id: string; }) => {
     if (!user) {
       console.log('Usuário não autenticado, não é possível criar orçamento');
       return;
@@ -291,6 +302,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           project_name: budgetData.project_name,
           client_name: budgetData.client_name || null,
           city: budgetData.city || null,
+          company_id: budgetData.company_id, // CRÍTICO: Incluir company_id
           user_id: user.id,
           status: 'Em Andamento',
         })
@@ -302,13 +314,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Orçamento adicionado com sucesso:', data);
+      console.log('[DEBUG] Orçamento adicionado com sucesso (dados do banco):', data);
 
       // Mapear dados do banco para o formato do frontend e adicionar ao estado
+      // IMPORTANTE: Usar TODOS os dados que vem do banco, incluindo company_id
       const newBudget: Orcamento = {
         id: data.id,
         nome: data.project_name || '',
-        concessionariaId: '', // Será implementado quando conectarmos as concessionárias
+        concessionariaId: data.company_id || '', // Usar company_id do banco
+        company_id: data.company_id, // CRÍTICO: ID da empresa no Supabase
         dataModificacao: data.updated_at ? new Date(data.updated_at).toISOString().split('T')[0] : '',
         status: data.status as 'Em Andamento' | 'Finalizado',
         postes: [],
@@ -316,14 +330,163 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...(data.city && { city: data.city }),
       };
 
+      console.log('[DEBUG] Novo orçamento formatado:', newBudget);
+
       setBudgets(prev => [newBudget, ...prev]);
       
       // Definir como orçamento atual e mudar para a área de trabalho
+      console.log('[DEBUG] Definindo currentOrcamento com company_id:', newBudget.company_id);
       setCurrentOrcamento(newBudget);
       setCurrentView('orcamento');
     } catch (error) {
       console.error('Erro ao adicionar orçamento:', error);
       throw error;
+    }
+  };
+
+  const uploadPlanImage = async (budgetId: string, file: File) => {
+    if (!user) {
+      console.log('Usuário não autenticado, não é possível fazer upload');
+      return;
+    }
+
+    try {
+      setLoadingUpload(true);
+      console.log('Fazendo upload da imagem da planta:', file.name);
+
+      // a. Gerar um caminho de arquivo único para evitar conflitos
+      const timestamp = Date.now();
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = `public/budgets/${budgetId}/${timestamp}_${sanitizedFileName}`;
+
+      // b. Fazer o upload do arquivo para o bucket 'plans'
+      let uploadData;
+      
+      const { data: initialUploadData, error: uploadError } = await supabase.storage
+        .from('plans')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        // Se o bucket não existir, tentar criá-lo
+        if (uploadError.message?.includes('Bucket not found')) {
+          console.log('Bucket "plans" não existe, criando...');
+          
+          const { error: createBucketError } = await supabase.storage
+            .createBucket('plans', {
+              public: true,
+              allowedMimeTypes: ['image/*', 'application/pdf'],
+              fileSizeLimit: 10 * 1024 * 1024 // 10MB
+            });
+
+          if (createBucketError) {
+            console.error('Erro ao criar bucket:', createBucketError);
+            throw createBucketError;
+          }
+
+          console.log('Bucket "plans" criado com sucesso');
+          
+          // Tentar fazer upload novamente
+          const { data: retryUploadData, error: retryUploadError } = await supabase.storage
+            .from('plans')
+            .upload(filePath, file);
+
+          if (retryUploadError) {
+            console.error('Erro ao fazer upload do arquivo após criar bucket:', retryUploadError);
+            throw retryUploadError;
+          }
+
+          uploadData = retryUploadData;
+        } else {
+          console.error('Erro ao fazer upload do arquivo:', uploadError);
+          throw uploadError;
+        }
+      } else {
+        uploadData = initialUploadData;
+      }
+
+      console.log('Upload realizado com sucesso:', uploadData);
+
+      // c. Obter a URL pública do arquivo
+      const { data: publicUrlData } = supabase.storage
+        .from('plans')
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicUrlData.publicUrl;
+      console.log('URL pública gerada:', publicUrl);
+
+      // d. Atualizar a tabela budgets, salvando a publicUrl na coluna plan_image_url
+      const { error: updateError } = await supabase
+        .from('budgets')
+        .update({ plan_image_url: publicUrl })
+        .eq('id', budgetId);
+
+      if (updateError) {
+        console.error('Erro ao atualizar orçamento com URL da imagem:', updateError);
+        throw updateError;
+      }
+
+      console.log('Orçamento atualizado com URL da imagem');
+
+      // e. Atualizar o currentOrcamento no estado local para refletir a nova URL da imagem
+      if (currentOrcamento && currentOrcamento.id === budgetId) {
+        setCurrentOrcamento(prev => prev ? { ...prev, imagemPlanta: publicUrl } : null);
+      }
+
+      // Atualizar também a lista de budgets
+      setBudgets(prev => prev.map(budget => 
+        budget.id === budgetId 
+          ? { ...budget, imagemPlanta: publicUrl }
+          : budget
+      ));
+
+    } catch (error) {
+      console.error('Erro no upload da imagem da planta:', error);
+      throw error;
+    } finally {
+      setLoadingUpload(false);
+    }
+  };
+
+  const deletePlanImage = async (budgetId: string) => {
+    if (!user) {
+      console.log('Usuário não autenticado, não é possível deletar imagem');
+      return;
+    }
+
+    try {
+      setLoadingUpload(true);
+      console.log('Deletando imagem da planta do orçamento:', budgetId);
+
+      // Atualizar a tabela budgets, removendo a URL da imagem
+      const { error: updateError } = await supabase
+        .from('budgets')
+        .update({ plan_image_url: null })
+        .eq('id', budgetId);
+
+      if (updateError) {
+        console.error('Erro ao remover URL da imagem do orçamento:', updateError);
+        throw updateError;
+      }
+
+      console.log('URL da imagem removida do orçamento');
+
+      // Atualizar o currentOrcamento no estado local
+      if (currentOrcamento && currentOrcamento.id === budgetId) {
+        setCurrentOrcamento(prev => prev ? { ...prev, imagemPlanta: undefined } : null);
+      }
+
+      // Atualizar também a lista de budgets
+      setBudgets(prev => prev.map(budget => 
+        budget.id === budgetId 
+          ? { ...budget, imagemPlanta: undefined }
+          : budget
+      ));
+
+    } catch (error) {
+      console.error('Erro ao deletar imagem da planta:', error);
+      throw error;
+    } finally {
+      setLoadingUpload(false);
     }
   };
 
@@ -376,7 +539,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Detalhes do orçamento encontrados:', data);
+      console.log('[DEBUG] fetchBudgetDetails - Dados brutos retornados:', JSON.stringify(data, null, 2));
 
       // Mapear os dados para o tipo correto
       const budgetDetailsFormatted: BudgetPostDetail[] = data?.map(post => ({
@@ -384,39 +547,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: post.name || '',
         x_coord: post.x_coord || 0,
         y_coord: post.y_coord || 0,
-        post_types: (post.post_types && Array.isArray(post.post_types) && post.post_types.length > 0) ? {
-          id: post.post_types[0].id,
-          name: post.post_types[0].name || '',
-          code: post.post_types[0].code || undefined,
-          description: post.post_types[0].description || undefined,
-          shape: post.post_types[0].shape || undefined,
-          height_m: post.post_types[0].height_m || undefined,
-          price: post.post_types[0].price || 0
+        post_types: post.post_types ? {
+          id: post.post_types.id,
+          name: post.post_types.name || '',
+          code: post.post_types.code || undefined,
+          description: post.post_types.description || undefined,
+          shape: post.post_types.shape || undefined,
+          height_m: post.post_types.height_m || undefined,
+          price: post.post_types.price || 0
         } : null,
         post_item_groups: post.post_item_groups?.map(group => ({
           id: group.id,
           name: group.name || '',
           template_id: group.template_id || undefined,
-          post_item_group_materials: group.post_item_group_materials?.map(material => ({
-            material_id: material.material_id,
-            quantity: material.quantity || 0,
-            price_at_addition: material.price_at_addition || 0,
-            materials: (material.materials && Array.isArray(material.materials) && material.materials.length > 0) ? {
-              id: material.materials[0].id,
-              code: material.materials[0].code || '',
-              name: material.materials[0].name || '',
-              description: material.materials[0].description || undefined,
-              unit: material.materials[0].unit || '',
-              price: material.materials[0].price || 0
-            } : {
-              id: '',
-              code: '',
-              name: 'Material não encontrado',
-              description: undefined,
-              unit: '',
-              price: 0
+          post_item_group_materials: group.post_item_group_materials?.map(material => {
+            if (!material.materials) {
+              console.error('[DEBUG] Material sem dados aninhados:', material);
             }
-          })) || []
+            
+            return {
+              material_id: material.material_id,
+              quantity: material.quantity || 0,
+              price_at_addition: material.price_at_addition || 0,
+              materials: material.materials ? {
+                id: material.materials.id,
+                code: material.materials.code || '',
+                name: material.materials.name || '',
+                description: material.materials.description || undefined,
+                unit: material.materials.unit || '',
+                price: material.materials.price || 0
+              } : {
+                id: '',
+                code: '',
+                name: 'Material não encontrado',
+                description: undefined,
+                unit: '',
+                price: 0
+              }
+            };
+          }) || []
         })) || []
       })) || [];
 
@@ -802,7 +971,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchItemGroups = useCallback(async (companyId: string) => {
     try {
       setLoadingGroups(true);
-      console.log('Buscando grupos de itens do Supabase para empresa:', companyId);
+      console.log('[DEBUG] Buscando grupos para a concessionária ID:', companyId);
       
       // Buscar templates de grupos para a empresa
       const { data: templatesData, error: templatesError } = await supabase
@@ -831,7 +1000,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw templatesError;
       }
 
-      console.log('Templates encontrados:', templatesData);
+      console.log('[DEBUG] Grupos encontrados no banco:', templatesData);
 
       // Mapear os dados do banco para o formato do frontend
       const gruposFormatados: GrupoItem[] = templatesData?.map(template => ({
@@ -845,6 +1014,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })) || []
       })) || [];
 
+      console.log('[DEBUG] Grupos formatados para o estado:', gruposFormatados);
       setItemGroups(gruposFormatados);
     } catch (error) {
       console.error('Erro ao buscar grupos de itens:', error);
@@ -1031,6 +1201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadingBudgets,
       loadingBudgetDetails,
       loadingPostTypes,
+      loadingUpload,
       
       // Novos estados para gerenciar grupos
       utilityCompanies,
@@ -1053,6 +1224,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetchBudgets,
       addBudget,
       fetchBudgetDetails,
+      uploadPlanImage,
+      deletePlanImage,
       
       // Funções de tipos de poste
       fetchPostTypes,

@@ -41,6 +41,7 @@ export interface Orcamento {
   id: string;
   nome: string;
   concessionariaId: string;
+  company_id?: string; // ID da empresa no Supabase
   dataModificacao: string;
   status: 'Em Andamento' | 'Finalizado';
   imagemPlanta?: string;

@@ -21,6 +21,9 @@ export function Dashboard() {
 
   const handleAbrirOrcamento = (orcamentoId: string) => {
     const orcamento = budgets.find(o => o.id === orcamentoId);
+    console.log('[DEBUG] Dashboard - Orçamento encontrado:', orcamento);
+    console.log('[DEBUG] Dashboard - company_id do orçamento:', orcamento?.company_id);
+    
     if (orcamento) {
       setCurrentOrcamento(orcamento);
       setCurrentView('orcamento');

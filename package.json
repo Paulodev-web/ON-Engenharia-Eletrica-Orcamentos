@@ -10,10 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@radix-ui/react-accordion": "^1.2.12",
     "@supabase/supabase-js": "^2.56.0",
+    "clsx": "^2.1.1",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-pdf": "^10.1.0",
+    "react-zoom-pan-pinch": "^3.7.0",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",

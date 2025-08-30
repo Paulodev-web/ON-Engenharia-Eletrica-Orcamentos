@@ -71,16 +71,16 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      <div className="p-4 border-b">
+    <div className="bg-gray-50 rounded-lg p-4 h-full flex flex-col">
+      <div className="mb-4 flex-shrink-0">
         <div className="flex items-center space-x-2">
           <Calculator className="h-5 w-5 text-green-600" />
-          <h3 className="font-semibold text-gray-900">Consolidação de Materiais</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Consolidação de Materiais</h3>
         </div>
         <p className="text-sm text-gray-600 mt-1">{orcamentoNome}</p>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-y-auto">
         {materiaisConsolidados.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
             <Package className="h-12 w-12 text-gray-400 mb-4" />
@@ -145,21 +145,17 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
 
       {/* Rodapé com Total */}
       {materiaisConsolidados.length > 0 && (
-        <div className="border-t bg-gray-50 p-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-sm text-gray-600">
-                {materiaisConsolidados.length} materiais únicos
-              </p>
-              <p className="text-xs text-gray-500">
-                Baseado em {budgetDetails?.length || 0} postes
-              </p>
+        <div className="border-t bg-white mt-4 p-4 rounded-lg flex-shrink-0">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">{materiaisConsolidados.length} materiais únicos</span>
+              <span className="text-gray-500">({budgetDetails?.length || 0} postes)</span>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">Custo Total do Orçamento</p>
-              <p className="text-xl font-bold text-green-600">
+            <div className="flex justify-between items-center pt-2 border-t">
+              <span className="text-sm font-medium text-gray-700">Custo Total:</span>
+              <span className="text-lg font-bold text-green-600">
                 {formatCurrency(custoTotal)}
-              </p>
+              </span>
             </div>
           </div>
         </div>
