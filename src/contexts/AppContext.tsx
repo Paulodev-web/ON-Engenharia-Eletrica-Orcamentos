@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, PostType } from '../types';
+import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, BudgetDetails, PostType } from '../types';
 import { gruposItens as initialGrupos, concessionarias, orcamentos as initialOrcamentos } from '../data/mockData';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
@@ -10,7 +10,7 @@ interface AppContextType {
   concessionarias: Concessionaria[];
   orcamentos: Orcamento[];
   budgets: Orcamento[];
-  budgetDetails: BudgetPostDetail[] | null;
+  budgetDetails: BudgetDetails | null;
   postTypes: PostType[];
   currentOrcamento: Orcamento | null;
   currentView: string;
@@ -75,7 +75,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [gruposItens, setGruposItens] = useState<GrupoItem[]>(initialGrupos);
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>(initialOrcamentos);
   const [budgets, setBudgets] = useState<Orcamento[]>([]);
-  const [budgetDetails, setBudgetDetails] = useState<BudgetPostDetail[] | null>(null);
+  const [budgetDetails, setBudgetDetails] = useState<BudgetDetails | null>(null);
   const [postTypes, setPostTypes] = useState<PostType[]>([]);
   const [currentOrcamento, setCurrentOrcamento] = useState<Orcamento | null>(null);
   const [currentView, setCurrentView] = useState<string>('dashboard');
@@ -95,7 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchMaterials = async () => {
     try {
       setLoadingMaterials(true);
-      console.log('Buscando materiais do Supabase...');
+
       
       const { data, error } = await supabase
         .from('materials')
@@ -107,7 +107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Materiais encontrados:', data);
+
 
       // Mapear os dados do banco para o formato do frontend
       const materiaisFormatados: Material[] = data?.map(item => ({
@@ -130,7 +130,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addMaterial = async (material: Omit<Material, 'id'>) => {
     try {
-      console.log('Adicionando material:', material);
+
       
       // Mapear dados do frontend para o formato do banco
       const materialData = {
@@ -151,7 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Material adicionado com sucesso:', data);
+
 
       // Mapear dados do banco para o formato do frontend e adicionar ao estado
       const newMaterial: Material = {
@@ -171,7 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateMaterial = async (id: string, material: Omit<Material, 'id'>) => {
     try {
-      console.log('Atualizando material:', id, material);
+
       
       // Mapear dados do frontend para o formato do banco
       const materialData = {
@@ -193,7 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Material atualizado com sucesso:', data);
+
 
       // Mapear dados do banco para o formato do frontend e atualizar o estado
       const updatedMaterial: Material = {
@@ -213,7 +213,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteMaterial = async (id: string) => {
     try {
-      console.log('Excluindo material:', id);
+
 
       const { error } = await supabase
         .from('materials')
@@ -225,7 +225,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Material excluído com sucesso:', id);
+
 
       // Remover do estado local
       setMateriais(prev => prev.filter(m => m.id !== id));
@@ -238,13 +238,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Funções para orçamentos
   const fetchBudgets = useCallback(async () => {
     if (!user) {
-      console.log('Usuário não autenticado, não é possível buscar orçamentos');
+
       return;
     }
 
     try {
       setLoadingBudgets(true);
-      console.log('Buscando orçamentos do Supabase...');
+
       
       const { data, error } = await supabase
         .from('budgets')
@@ -252,15 +252,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      console.log('[DEBUG] Dados brutos do banco (budgets):', data);
+
 
       if (error) {
         console.error('Erro ao buscar orçamentos:', error);
         throw error;
       }
 
-      console.log('Orçamentos encontrados:', data);
-      console.log('[DEBUG] Primeiro orçamento com company_id:', data?.[0]?.company_id);
+
+
 
       // Mapear os dados do banco para o formato do frontend
       const orcamentosFormatados: Orcamento[] = data?.map(item => ({
@@ -276,7 +276,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...(item.plan_image_url && { imagemPlanta: item.plan_image_url }),
       })) || [];
 
-      console.log('[DEBUG] Orçamentos formatados com company_id:', orcamentosFormatados.map(o => ({ id: o.id, nome: o.nome, company_id: o.company_id })));
+
 
       setBudgets(orcamentosFormatados);
     } catch (error) {
@@ -289,12 +289,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addBudget = async (budgetData: { project_name: string; client_name?: string; city?: string; company_id: string; }) => {
     if (!user) {
-      console.log('Usuário não autenticado, não é possível criar orçamento');
+
       return;
     }
 
     try {
-      console.log('Adicionando orçamento:', budgetData);
+
       
       const { data, error } = await supabase
         .from('budgets')
@@ -314,7 +314,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('[DEBUG] Orçamento adicionado com sucesso (dados do banco):', data);
+
 
       // Mapear dados do banco para o formato do frontend e adicionar ao estado
       // IMPORTANTE: Usar TODOS os dados que vem do banco, incluindo company_id
@@ -330,12 +330,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...(data.city && { city: data.city }),
       };
 
-      console.log('[DEBUG] Novo orçamento formatado:', newBudget);
+
 
       setBudgets(prev => [newBudget, ...prev]);
       
       // Definir como orçamento atual e mudar para a área de trabalho
-      console.log('[DEBUG] Definindo currentOrcamento com company_id:', newBudget.company_id);
+
       setCurrentOrcamento(newBudget);
       setCurrentView('orcamento');
     } catch (error) {
@@ -346,13 +346,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const uploadPlanImage = async (budgetId: string, file: File) => {
     if (!user) {
-      console.log('Usuário não autenticado, não é possível fazer upload');
+
       return;
     }
 
     try {
       setLoadingUpload(true);
-      console.log('Fazendo upload da imagem da planta:', file.name);
+
 
       // a. Gerar um caminho de arquivo único para evitar conflitos
       const timestamp = Date.now();
@@ -369,7 +369,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (uploadError) {
         // Se o bucket não existir, tentar criá-lo
         if (uploadError.message?.includes('Bucket not found')) {
-          console.log('Bucket "plans" não existe, criando...');
+
           
           const { error: createBucketError } = await supabase.storage
             .createBucket('plans', {
@@ -383,7 +383,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             throw createBucketError;
           }
 
-          console.log('Bucket "plans" criado com sucesso');
+
           
           // Tentar fazer upload novamente
           const { data: retryUploadData, error: retryUploadError } = await supabase.storage
@@ -404,7 +404,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         uploadData = initialUploadData;
       }
 
-      console.log('Upload realizado com sucesso:', uploadData);
+
 
       // c. Obter a URL pública do arquivo
       const { data: publicUrlData } = supabase.storage
@@ -412,7 +412,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .getPublicUrl(filePath);
 
       const publicUrl = publicUrlData.publicUrl;
-      console.log('URL pública gerada:', publicUrl);
+
 
       // d. Atualizar a tabela budgets, salvando a publicUrl na coluna plan_image_url
       const { error: updateError } = await supabase
@@ -425,7 +425,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw updateError;
       }
 
-      console.log('Orçamento atualizado com URL da imagem');
+
 
       // e. Atualizar o currentOrcamento no estado local para refletir a nova URL da imagem
       if (currentOrcamento && currentOrcamento.id === budgetId) {
@@ -449,13 +449,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deletePlanImage = async (budgetId: string) => {
     if (!user) {
-      console.log('Usuário não autenticado, não é possível deletar imagem');
+
       return;
     }
 
     try {
       setLoadingUpload(true);
-      console.log('Deletando imagem da planta do orçamento:', budgetId);
+
 
       // Atualizar a tabela budgets, removendo a URL da imagem
       const { error: updateError } = await supabase
@@ -468,7 +468,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw updateError;
       }
 
-      console.log('URL da imagem removida do orçamento');
+
 
       // Atualizar o currentOrcamento no estado local
       if (currentOrcamento && currentOrcamento.id === budgetId) {
@@ -493,10 +493,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchBudgetDetails = useCallback(async (budgetId: string) => {
     try {
       setLoadingBudgetDetails(true);
-      console.log('Buscando detalhes do orçamento:', budgetId);
+
       
-      // Query aninhada para buscar todos os dados relacionados ao orçamento
-      const { data, error } = await supabase
+      // Buscar informações do orçamento principal
+      const { data: budgetData, error: budgetError } = await supabase
+        .from('budgets')
+        .select(`
+          id,
+          project_name,
+          company_id,
+          client_name,
+          city,
+          status,
+          created_at,
+          updated_at,
+          plan_image_url
+        `)
+        .eq('id', budgetId)
+        .single();
+
+      if (budgetError) {
+        console.error('ERRO DETALHADO DO SUPABASE (budget):', budgetError);
+        console.error('Tipo do erro:', typeof budgetError);
+        console.error('Mensagem do erro:', budgetError.message);
+        console.error('Código do erro:', budgetError.code);
+        console.error('Detalhes do erro:', budgetError.details);
+        console.error('Hint do erro:', budgetError.hint);
+        throw budgetError;
+      }
+      
+      // Query aninhada para buscar todos os postes relacionados ao orçamento
+      const { data: postsData, error: postsError } = await supabase
         .from('budget_posts')
         .select(`
           id,
@@ -534,15 +561,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .eq('budget_id', budgetId)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Erro ao buscar detalhes do orçamento:', error);
-        throw error;
+      if (postsError) {
+        console.error('ERRO DETALHADO DO SUPABASE (posts):', postsError);
+        console.error('Tipo do erro:', typeof postsError);
+        console.error('Mensagem do erro:', postsError.message);
+        console.error('Código do erro:', postsError.code);
+        console.error('Detalhes do erro:', postsError.details);
+        console.error('Hint do erro:', postsError.hint);
+        throw postsError;
       }
 
-      console.log('[DEBUG] fetchBudgetDetails - Dados brutos retornados:', JSON.stringify(data, null, 2));
 
-      // Mapear os dados para o tipo correto
-      const budgetDetailsFormatted: BudgetPostDetail[] = data?.map(post => ({
+
+      // Mapear os dados dos postes para o tipo correto
+      const postsFormatted: BudgetPostDetail[] = postsData?.map(post => ({
         id: post.id,
         name: post.name || '',
         x_coord: post.x_coord || 0,
@@ -561,10 +593,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           name: group.name || '',
           template_id: group.template_id || undefined,
           post_item_group_materials: group.post_item_group_materials?.map(material => {
-            if (!material.materials) {
-              console.error('[DEBUG] Material sem dados aninhados:', material);
-            }
-            
             return {
               material_id: material.material_id,
               quantity: material.quantity || 0,
@@ -589,9 +617,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })) || []
       })) || [];
 
-      setBudgetDetails(budgetDetailsFormatted);
+      // Combinar dados do orçamento e postes em um objeto BudgetDetails
+      const budgetDetails: BudgetDetails = {
+        id: budgetData.id,
+        name: budgetData.project_name || '',
+        company_id: budgetData.company_id || undefined,
+        client_name: budgetData.client_name || undefined,
+        city: budgetData.city || undefined,
+        status: budgetData.status || 'Em Andamento',
+        created_at: budgetData.created_at || undefined,
+        updated_at: budgetData.updated_at || undefined,
+        plan_image_url: budgetData.plan_image_url || undefined,
+        posts: postsFormatted
+      };
+
+      setBudgetDetails(budgetDetails);
     } catch (error) {
-      console.error('Erro ao buscar detalhes do orçamento:', error);
+      console.error('ERRO DETALHADO DO SUPABASE (geral):', error);
+      console.error('Tipo do erro:', typeof error);
+      if (error && typeof error === 'object') {
+        console.error('Mensagem do erro:', (error as any).message);
+        console.error('Código do erro:', (error as any).code);
+        console.error('Detalhes do erro:', (error as any).details);
+        console.error('Hint do erro:', (error as any).hint);
+        console.error('Stack do erro:', (error as any).stack);
+      }
       setBudgetDetails(null);
     } finally {
       setLoadingBudgetDetails(false);
@@ -601,7 +651,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchPostTypes = useCallback(async () => {
     try {
       setLoadingPostTypes(true);
-      console.log('Buscando tipos de poste do Supabase...');
+
       
       const { data, error } = await supabase
         .from('post_types')
@@ -613,7 +663,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Tipos de poste encontrados:', data);
+
 
       // Mapear os dados do banco para o formato do frontend
       const postTypesFormatted: PostType[] = data?.map(item => ({
@@ -637,7 +687,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addPostToBudget = async (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => {
     try {
-      console.log('Adicionando poste ao orçamento:', newPostData);
+      console.log(`🔄 === SUPABASE INSERT INICIADO ===`);
+      console.log(`📤 Dados sendo enviados para Supabase:`, newPostData);
       
       const { data, error } = await supabase
         .from('budget_posts')
@@ -667,7 +718,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Poste adicionado com sucesso:', data);
+      console.log(`✅ SUPABASE INSERT SUCESSO - dados retornados:`, data);
 
       // Mapear o novo poste para o formato dos budgetDetails
       const newPostDetail: BudgetPostDetail = {
@@ -687,8 +738,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         post_item_groups: [] // Novo poste não tem grupos ainda
       };
 
-      // Adicionar o novo poste ao estado budgetDetails
-      setBudgetDetails(prev => prev ? [...prev, newPostDetail] : [newPostDetail]);
+      console.log(`🎯 Novo post mapeado:`, newPostDetail);
+
+      // Adicionar o novo poste ao estado budgetDetails de forma imutável
+      setBudgetDetails(prevDetails => {
+        // Verificação de segurança: Se não houver um orçamento carregado,
+        // não faz nada e avisa no console.
+        if (!prevDetails) {
+          console.error("Erro Crítico: Tentativa de adicionar poste sem um orçamento completamente carregado.");
+          return prevDetails;
+        }
+
+        console.log(`🔄 Atualizando estado local - posts antes:`, prevDetails.posts.length);
+        
+        // Lógica correta e única:
+        // Retorna o objeto de orçamento anterior, com a lista de postes atualizada.
+        const updatedDetails = {
+          ...prevDetails,
+          posts: [...prevDetails.posts, newPostDetail],
+        };
+        
+        console.log(`✅ Estado atualizado - posts depois:`, updatedDetails.posts.length);
+        console.log(`📍 Último post adicionado:`, updatedDetails.posts[updatedDetails.posts.length - 1]);
+        
+        return updatedDetails;
+      });
     } catch (error) {
       console.error('Erro ao adicionar poste:', error);
       throw error;
@@ -697,7 +771,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addGroupToPost = async (groupId: string, postId: string) => {
     try {
-      console.log('Adicionando grupo ao poste:', { groupId, postId });
+
       
       // a. Primeiro, buscar os dados do template de grupo
       const { data: groupTemplate, error: groupError } = await supabase
@@ -711,7 +785,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw groupError;
       }
 
-      console.log('Template do grupo encontrado:', groupTemplate);
+
 
       // b. Criar novo registro na tabela post_item_groups
       const { data: newGroupInstance, error: instanceError } = await supabase
@@ -729,7 +803,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw instanceError;
       }
 
-      console.log('Instância do grupo criada:', newGroupInstance);
+
 
       // c. Buscar todos os materiais e suas quantidades do template
       const { data: templateMaterials, error: materialsError } = await supabase
@@ -753,7 +827,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw materialsError;
       }
 
-      console.log('Materiais do template encontrados:', templateMaterials);
+
 
       // d. Inserção em lote na tabela post_item_group_materials
       if (templateMaterials && templateMaterials.length > 0) {
@@ -775,46 +849,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
           throw batchInsertError;
         }
 
-        console.log('Materiais do grupo inseridos com sucesso');
+
       }
 
       // Atualizar o estado budgetDetails localmente
       setBudgetDetails(prev => {
         if (!prev) return prev;
 
-        return prev.map(post => {
-          if (post.id === postId) {
-            // Criar o novo grupo para adicionar ao poste
-            const newGroup = {
-              id: newGroupInstance.id,
-              name: groupTemplate.name,
-              template_id: groupId,
-              post_item_group_materials: templateMaterials?.map(templateMaterial => ({
-                material_id: templateMaterial.material_id,
-                quantity: templateMaterial.quantity,
-                price_at_addition: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
-                  ? templateMaterial.materials[0].price
-                  : 0,
-                materials: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
-                  ? templateMaterial.materials[0]
-                  : {
-                      id: '',
-                      code: '',
-                      name: 'Material não encontrado',
-                      description: undefined,
-                      unit: '',
-                      price: 0
-                    }
-              })) || []
-            };
+        return {
+          ...prev,
+          posts: prev.posts.map(post => {
+            if (post.id === postId) {
+              // Criar o novo grupo para adicionar ao poste
+              const newGroup = {
+                id: newGroupInstance.id,
+                name: groupTemplate.name,
+                template_id: groupId,
+                post_item_group_materials: templateMaterials?.map(templateMaterial => ({
+                  material_id: templateMaterial.material_id,
+                  quantity: templateMaterial.quantity,
+                  price_at_addition: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
+                    ? templateMaterial.materials[0].price
+                    : 0,
+                  materials: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
+                    ? templateMaterial.materials[0]
+                    : {
+                        id: '',
+                        code: '',
+                        name: 'Material não encontrado',
+                        description: undefined,
+                        unit: '',
+                        price: 0
+                      }
+                })) || []
+              };
 
-            return {
-              ...post,
-              post_item_groups: [...post.post_item_groups, newGroup]
-            };
-          }
-          return post;
-        });
+              return {
+                ...post,
+                post_item_groups: [...post.post_item_groups, newGroup]
+              };
+            }
+            return post;
+          })
+        };
       });
 
     } catch (error) {
@@ -825,7 +902,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deletePostFromBudget = async (postId: string) => {
     try {
-      console.log('Excluindo poste do orçamento:', postId);
+
 
       const { error } = await supabase
         .from('budget_posts')
@@ -837,12 +914,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Poste excluído com sucesso:', postId);
+
 
       // Atualizar o estado budgetDetails localmente removendo o poste
       setBudgetDetails(prev => {
         if (!prev) return prev;
-        return prev.filter(post => post.id !== postId);
+        return {
+          ...prev,
+          posts: prev.posts.filter(post => post.id !== postId)
+        };
       });
     } catch (error) {
       console.error('Erro ao excluir poste:', error);
@@ -852,7 +932,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeGroupFromPost = async (postGroupId: string) => {
     try {
-      console.log('Removendo grupo do poste:', postGroupId);
+
 
       const { error } = await supabase
         .from('post_item_groups')
@@ -864,15 +944,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Grupo removido com sucesso:', postGroupId);
+
 
       // Atualizar o estado budgetDetails localmente removendo o grupo
       setBudgetDetails(prev => {
         if (!prev) return prev;
-        return prev.map(post => ({
-          ...post,
-          post_item_groups: post.post_item_groups.filter(group => group.id !== postGroupId)
-        }));
+        return {
+          ...prev,
+          posts: prev.posts.map(post => ({
+            ...post,
+            post_item_groups: post.post_item_groups.filter(group => group.id !== postGroupId)
+          }))
+        };
       });
     } catch (error) {
       console.error('Erro ao remover grupo:', error);
@@ -882,7 +965,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateMaterialQuantityInPostGroup = async (postGroupId: string, materialId: string, newQuantity: number) => {
     try {
-      console.log('Atualizando quantidade de material:', { postGroupId, materialId, newQuantity });
+
 
       // Validar quantidade
       if (newQuantity < 0) {
@@ -900,32 +983,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Quantidade do material atualizada com sucesso');
+
 
       // Atualizar o estado budgetDetails localmente
       setBudgetDetails(prev => {
         if (!prev) return prev;
 
-        return prev.map(post => ({
-          ...post,
-          post_item_groups: post.post_item_groups.map(group => {
-            if (group.id === postGroupId) {
-              return {
-                ...group,
-                post_item_group_materials: group.post_item_group_materials.map(material => {
-                  if (material.material_id === materialId) {
-                    return {
-                      ...material,
-                      quantity: newQuantity
-                    };
-                  }
-                  return material;
-                })
-              };
-            }
-            return group;
-          })
-        }));
+        return {
+          ...prev,
+          posts: prev.posts.map(post => ({
+            ...post,
+            post_item_groups: post.post_item_groups.map(group => {
+              if (group.id === postGroupId) {
+                return {
+                  ...group,
+                  post_item_group_materials: group.post_item_group_materials.map(material => {
+                    if (material.material_id === materialId) {
+                      return {
+                        ...material,
+                        quantity: newQuantity
+                      };
+                    }
+                    return material;
+                  })
+                };
+              }
+              return group;
+            })
+          }))
+        };
       });
     } catch (error) {
       console.error('Erro ao atualizar quantidade do material:', error);
@@ -937,7 +1023,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchUtilityCompanies = useCallback(async () => {
     try {
       setLoadingCompanies(true);
-      console.log('Buscando concessionárias do Supabase...');
+
       
       const { data, error } = await supabase
         .from('utility_companies')
@@ -949,7 +1035,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Concessionárias encontradas:', data);
+
 
       // Mapear os dados do banco para o formato do frontend
       const concessionariasFormatadas: Concessionaria[] = data?.map(item => ({
@@ -971,7 +1057,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchItemGroups = useCallback(async (companyId: string) => {
     try {
       setLoadingGroups(true);
-      console.log('[DEBUG] Buscando grupos para a concessionária ID:', companyId);
+
       
       // Buscar templates de grupos para a empresa
       const { data: templatesData, error: templatesError } = await supabase
@@ -1000,7 +1086,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw templatesError;
       }
 
-      console.log('[DEBUG] Grupos encontrados no banco:', templatesData);
+
 
       // Mapear os dados do banco para o formato do frontend
       const gruposFormatados: GrupoItem[] = templatesData?.map(template => ({
@@ -1014,7 +1100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })) || []
       })) || [];
 
-      console.log('[DEBUG] Grupos formatados para o estado:', gruposFormatados);
+
       setItemGroups(gruposFormatados);
     } catch (error) {
       console.error('Erro ao buscar grupos de itens:', error);
@@ -1026,7 +1112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addGroup = async (groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => {
     try {
-      console.log('Adicionando grupo:', groupData);
+
       
       // Primeiro criar o registro principal na tabela item_group_templates
       const { data: groupTemplate, error: groupError } = await supabase
@@ -1044,7 +1130,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw groupError;
       }
 
-      console.log('Template do grupo criado:', groupTemplate);
+
 
       // Inserir materiais do grupo na tabela template_materials
       if (groupData.materials.length > 0) {
@@ -1063,7 +1149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           throw materialsError;
         }
 
-        console.log('Materiais do grupo adicionados com sucesso');
+
       }
 
       // Atualizar a UI com os dados atualizados
@@ -1076,7 +1162,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateGroup = async (groupId: string, groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => {
     try {
-      console.log('Atualizando grupo:', groupId, groupData);
+
       
       // Atualizar o registro principal na tabela item_group_templates
       const { error: updateError } = await supabase
@@ -1093,7 +1179,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw updateError;
       }
 
-      console.log('Template do grupo atualizado');
+
 
       // Deletar todos os materiais existentes para este grupo
       const { error: deleteError } = await supabase
@@ -1106,7 +1192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw deleteError;
       }
 
-      console.log('Materiais existentes removidos');
+
 
       // Inserir nova lista de materiais
       if (groupData.materials.length > 0) {
@@ -1125,7 +1211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           throw materialsError;
         }
 
-        console.log('Novos materiais do grupo adicionados');
+
       }
 
       // Atualizar a UI com os dados atualizados
@@ -1138,7 +1224,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteGroup = async (groupId: string) => {
     try {
-      console.log('Excluindo grupo:', groupId);
+
 
       // A configuração ON DELETE CASCADE cuidará dos materiais automaticamente
       const { error } = await supabase
@@ -1151,7 +1237,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      console.log('Grupo excluído com sucesso:', groupId);
+
 
       // Remover do estado local
       setItemGroups(prev => prev.filter(g => g.id !== groupId));

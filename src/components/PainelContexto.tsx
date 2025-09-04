@@ -21,25 +21,23 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
   // Buscar grupos da concessionária quando um poste do Supabase for selecionado
   useEffect(() => {
     if (selectedPostDetail && utilityCompanies.length > 0) {
-      console.log('[DEBUG] PainelContexto - Concessionária:', concessionaria);
-      console.log('[DEBUG] PainelContexto - Empresas do Supabase:', utilityCompanies);
+
       
       // Encontrar a empresa correspondente no Supabase
       const company = utilityCompanies.find(c => c.nome === concessionaria?.nome || c.sigla === concessionaria?.sigla);
-      console.log('[DEBUG] PainelContexto - Empresa encontrada:', company);
+
       
       if (company) {
-        console.log('[DEBUG] PainelContexto - Chamando fetchItemGroups com ID:', company.id);
+
         fetchItemGroups(company.id);
       } else {
-        console.log('[DEBUG] PainelContexto - Nenhuma empresa do Supabase encontrada para a concessionária');
+
       }
     }
   }, [selectedPostDetail, utilityCompanies, concessionaria, fetchItemGroups]);
   
   // Debug logs para rastrear o fluxo de dados
-  console.log('[DEBUG] Orçamento atual:', orcamento);
-  console.log('[DEBUG] Todos os templates de grupo disponíveis no estado:', itemGroups);
+
   
   // Usar grupos do Supabase (itemGroups) quando disponíveis, senão fallback para local (gruposItens)
   const availableGroups = selectedPostDetail && itemGroups.length > 0 ? itemGroups : gruposItens;
@@ -54,7 +52,7 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
     return matchesCompany && g.nome.toLowerCase().includes(searchTerm.toLowerCase());
   });
   
-  console.log('[DEBUG] Grupos filtrados para este orçamento:', gruposFiltrados);
+
 
   const handleAddGrupo = async (grupoId: string) => {
     // Se temos dados do Supabase (selectedPostDetail), usar a função do Supabase
@@ -107,7 +105,7 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
     if (!selectedPoste) return;
     
     // Esta funcionalidade seria implementada no componente pai
-    console.log('Duplicar poste:', selectedPoste.id);
+
   };
 
   const handleToggleConcluido = () => {

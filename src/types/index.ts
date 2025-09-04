@@ -105,3 +105,17 @@ export interface PostItemGroupMaterial {
     price: number;
   };
 }
+
+// Tipo unificado para dados detalhados do orçamento com postes
+export interface BudgetDetails {
+  id: string;
+  name: string;
+  company_id?: string;
+  client_name?: string;
+  city?: string;
+  status?: 'Em Andamento' | 'Finalizado';
+  created_at?: string;
+  updated_at?: string;
+  plan_image_url?: string;
+  posts: BudgetPostDetail[];
+}

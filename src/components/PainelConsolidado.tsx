@@ -1,9 +1,9 @@
 import React from 'react';
 import { Calculator, Package } from 'lucide-react';
-import { BudgetPostDetail } from '../types';
+import { BudgetPostDetail, BudgetDetails } from '../types';
 
 interface PainelConsolidadoProps {
-  budgetDetails: BudgetPostDetail[] | null;
+  budgetDetails: BudgetDetails | null;
   orcamentoNome: string;
 }
 
@@ -20,14 +20,14 @@ interface MaterialConsolidado {
 export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsolidadoProps) {
   
   const consolidarMateriais = (): MaterialConsolidado[] => {
-    if (!budgetDetails || budgetDetails.length === 0) {
+    if (!budgetDetails || !budgetDetails.posts || budgetDetails.posts.length === 0) {
       return [];
     }
 
     const materiaisMap = new Map<string, MaterialConsolidado>();
 
     // Percorrer todos os postes
-    budgetDetails.forEach(post => {
+    budgetDetails.posts.forEach(post => {
       // Percorrer todos os grupos do poste
       post.post_item_groups.forEach(group => {
         // Percorrer todos os materiais do grupo
@@ -149,7 +149,7 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">{materiaisConsolidados.length} materiais únicos</span>
-              <span className="text-gray-500">({budgetDetails?.length || 0} postes)</span>
+              <span className="text-gray-500">({budgetDetails?.posts?.length || 0} postes)</span>
             </div>
             <div className="flex justify-between items-center pt-2 border-t">
               <span className="text-sm font-medium text-gray-700">Custo Total:</span>
