@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Building2, Loader2 } from 'lucide-react';
+import { Plus, Calendar, Building2, Loader2, Edit, Trash2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { CriarOrcamentoModal } from './modals/CriarOrcamentoModal';
+import { AlertDialog } from './ui/alert-dialog';
+import { Orcamento } from '../types';
 
 export function Dashboard() {
   const { 
@@ -10,9 +12,13 @@ export function Dashboard() {
     concessionarias, 
     setCurrentView, 
     setCurrentOrcamento, 
-    fetchBudgets 
+    fetchBudgets,
+    deleteBudget
   } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Orcamento | null>(null);
+  const [deletingBudget, setDeletingBudget] = useState<Orcamento | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Buscar orçamentos na montagem do componente
   useEffect(() => {
@@ -36,6 +42,34 @@ export function Dashboard() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  const handleEditBudget = (budget: Orcamento) => {
+    setEditingBudget(budget);
+    setShowModal(true);
+  };
+
+  const handleDeleteBudget = (budget: Orcamento) => {
+    setDeletingBudget(budget);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingBudget) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteBudget(deletingBudget.id);
+      setDeletingBudget(null);
+    } catch (error) {
+      alert('Erro ao excluir orçamento. Tente novamente.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingBudget(null);
   };
 
   return (
@@ -127,15 +161,37 @@ export function Dashboard() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAbrirOrcamento(orcamento.id);
-                        }}
-                        className="text-blue-600 hover:text-blue-900 font-medium"
-                      >
-                        Abrir
-                      </button>
+                      <div className="flex items-center justify-end space-x-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAbrirOrcamento(orcamento.id);
+                          }}
+                          className="text-blue-600 hover:text-blue-900 font-medium"
+                        >
+                          Abrir
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditBudget(orcamento);
+                          }}
+                          className="text-gray-600 hover:text-gray-900 transition-colors"
+                          title="Editar orçamento"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBudget(orcamento);
+                          }}
+                          className="text-red-600 hover:text-red-900 transition-colors"
+                          title="Excluir orçamento"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -160,9 +216,22 @@ export function Dashboard() {
       {showModal && (
         <CriarOrcamentoModal
           isOpen={showModal}
-          onClose={() => setShowModal(false)}
+          onClose={handleCloseModal}
+          editingBudget={editingBudget}
         />
       )}
+
+      <AlertDialog
+        isOpen={!!deletingBudget}
+        onClose={() => setDeletingBudget(null)}
+        title="Confirmar Exclusão"
+        description={`Tem certeza que deseja excluir o orçamento "${deletingBudget?.nome}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onConfirm={confirmDelete}
+        confirmVariant="destructive"
+        loading={isDeleting}
+      />
     </div>
   );
 }

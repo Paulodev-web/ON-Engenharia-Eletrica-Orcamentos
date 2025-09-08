@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package, Layers, Building2 } from 'lucide-react';
+import { Package, Layers, Building2, TowerControl } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 
 export function Configuracoes() {
@@ -23,9 +23,16 @@ export function Configuracoes() {
     {
       icon: Building2,
       title: 'Gerenciar Concessionárias',
-      description: 'Configurar concessionárias do sistema',
-      action: () => alert('Funcionalidade em desenvolvimento'),
+      description: 'Cadastrar e gerenciar concessionárias do sistema',
+      action: () => setCurrentView('concessionarias'),
       color: 'bg-purple-600'
+    },
+    {
+      icon: TowerControl,
+      title: 'Gerenciar Tipos de Poste',
+      description: 'Cadastrar e gerenciar catálogo de tipos de postes',
+      action: () => setCurrentView('tipos-postes'),
+      color: 'bg-orange-600'
     }
   ];
 

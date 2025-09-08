@@ -7,6 +7,8 @@ import { AreaTrabalho } from './components/AreaTrabalho';
 import { Configuracoes } from './components/Configuracoes';
 import { GerenciarMateriais } from './components/GerenciarMateriais';
 import { GerenciarGrupos } from './components/GerenciarGrupos';
+import { GerenciarConcessionarias } from './components/GerenciarConcessionarias';
+import { GerenciarTiposPostes } from './components/GerenciarTiposPostes';
 import { EditorGrupo } from './components/EditorGrupo';
 import { Login } from './components/Login';
 
@@ -40,6 +42,10 @@ function AppContent() {
         return <GerenciarMateriais />;
       case 'grupos':
         return <GerenciarGrupos />;
+      case 'concessionarias':
+        return <GerenciarConcessionarias />;
+      case 'tipos-postes':
+        return <GerenciarTiposPostes />;
       case 'editor-grupo':
         return <EditorGrupo />;
       default:

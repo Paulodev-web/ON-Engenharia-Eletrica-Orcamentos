@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
+import { Orcamento } from '../../types';
 
 interface CriarOrcamentoModalProps {
   isOpen: boolean;
   onClose: () => void;
+  editingBudget?: Orcamento | null;
 }
 
-export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProps) {
-  const { concessionarias, addBudget, utilityCompanies, fetchUtilityCompanies } = useApp();
+export function CriarOrcamentoModal({ isOpen, onClose, editingBudget }: CriarOrcamentoModalProps) {
+  const { concessionarias, addBudget, updateBudget, utilityCompanies, fetchUtilityCompanies } = useApp();
   const [nome, setNome] = useState('');
   const [clientName, setClientName] = useState('');
   const [city, setCity] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isEditing = !!editingBudget;
 
   // Buscar empresas quando o modal abrir
   useEffect(() => {
@@ -21,6 +25,22 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
       fetchUtilityCompanies();
     }
   }, [isOpen, fetchUtilityCompanies]);
+
+  // Preencher formulário quando editando
+  useEffect(() => {
+    if (isOpen && editingBudget) {
+      setNome(editingBudget.nome || '');
+      setClientName(editingBudget.clientName || '');
+      setCity(editingBudget.city || '');
+      setSelectedCompanyId(editingBudget.company_id || '');
+    } else if (isOpen && !editingBudget) {
+      // Limpar formulário quando criando novo
+      setNome('');
+      setClientName('');
+      setCity('');
+      setSelectedCompanyId('');
+    }
+  }, [isOpen, editingBudget]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,24 +58,29 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
     setIsSubmitting(true);
     
     try {
-      await addBudget({
-        project_name: nome.trim(),
-        client_name: clientName.trim() || undefined,
-        city: city.trim() || undefined,
-        company_id: selectedCompanyId,
-      });
+      if (isEditing && editingBudget) {
+        // Atualizar orçamento existente
+        await updateBudget(editingBudget.id, {
+          project_name: nome.trim(),
+          client_name: clientName.trim() || undefined,
+          city: city.trim() || undefined,
+          company_id: selectedCompanyId,
+        });
+      } else {
+        // Criar novo orçamento
+        await addBudget({
+          project_name: nome.trim(),
+          client_name: clientName.trim() || undefined,
+          city: city.trim() || undefined,
+          company_id: selectedCompanyId,
+        });
+      }
       
       // Fechar o modal
       onClose();
-      
-      // Limpar formulário
-      setNome('');
-      setClientName('');
-      setCity('');
-      setSelectedCompanyId('');
     } catch (error) {
-      console.error('Erro ao criar orçamento:', error);
-      alert('Erro ao criar orçamento. Tente novamente.');
+      console.error(`Erro ao ${isEditing ? 'atualizar' : 'criar'} orçamento:`, error);
+      alert(`Erro ao ${isEditing ? 'atualizar' : 'criar'} orçamento. Tente novamente.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -67,7 +92,9 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Criar Novo Orçamento</h3>
+          <h3 className="text-lg font-semibold text-gray-900">
+            {isEditing ? 'Editar Orçamento' : 'Criar Novo Orçamento'}
+          </h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
@@ -161,10 +188,10 @@ export function CriarOrcamentoModal({ isOpen, onClose }: CriarOrcamentoModalProp
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Criando...</span>
+                  <span>{isEditing ? 'Salvando...' : 'Criando...'}</span>
                 </>
               ) : (
-                <span>Criar e Iniciar Orçamento</span>
+                <span>{isEditing ? 'Salvar Alterações' : 'Criar e Iniciar Orçamento'}</span>
               )}
             </button>
           </div>

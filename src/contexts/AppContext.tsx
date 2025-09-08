@@ -40,6 +40,8 @@ interface AppContextType {
   // Funções de orçamentos
   fetchBudgets: () => Promise<void>;
   addBudget: (budgetData: { project_name: string; client_name?: string; city?: string; company_id: string; }) => Promise<void>;
+  updateBudget: (budgetId: string, budgetData: { project_name?: string; client_name?: string; city?: string; company_id?: string; }) => Promise<void>;
+  deleteBudget: (budgetId: string) => Promise<void>;
   fetchBudgetDetails: (budgetId: string) => Promise<void>;
   uploadPlanImage: (budgetId: string, file: File) => Promise<void>;
   deletePlanImage: (budgetId: string) => Promise<void>;
@@ -52,12 +54,25 @@ interface AppContextType {
   removeGroupFromPost: (postGroupId: string) => Promise<void>;
   updateMaterialQuantityInPostGroup: (postGroupId: string, materialId: string, newQuantity: number) => Promise<void>;
   
+  // Funções para materiais avulsos
+  addLooseMaterialToPost: (postId: string, materialId: string, quantity: number, price: number) => Promise<void>;
+  updateLooseMaterialQuantity: (postMaterialId: string, newQuantity: number) => Promise<void>;
+  removeLooseMaterialFromPost: (postMaterialId: string) => Promise<void>;
+  
   // Funções para concessionárias e grupos
   fetchUtilityCompanies: () => Promise<void>;
+  addUtilityCompany: (data: { name: string }) => Promise<void>;
+  updateUtilityCompany: (id: string, data: { name: string }) => Promise<void>;
+  deleteUtilityCompany: (id: string) => Promise<void>;
   fetchItemGroups: (companyId: string) => Promise<void>;
   addGroup: (groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => Promise<void>;
   updateGroup: (groupId: string, groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => Promise<void>;
   deleteGroup: (groupId: string) => Promise<void>;
+  
+  // Funções para tipos de poste
+  addPostType: (data: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => Promise<void>;
+  updatePostType: (id: string, data: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => Promise<void>;
+  deletePostType: (id: string) => Promise<void>;
   
   // Funções locais (legacy)
   addGrupoItem: (grupo: Omit<GrupoItem, 'id'>) => void;
@@ -344,6 +359,93 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateBudget = async (budgetId: string, budgetData: { project_name?: string; client_name?: string; city?: string; company_id?: string; }) => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const updateData: any = {};
+      
+      if (budgetData.project_name !== undefined) updateData.project_name = budgetData.project_name;
+      if (budgetData.client_name !== undefined) updateData.client_name = budgetData.client_name || null;
+      if (budgetData.city !== undefined) updateData.city = budgetData.city || null;
+      if (budgetData.company_id !== undefined) updateData.company_id = budgetData.company_id;
+
+      const { data, error } = await supabase
+        .from('budgets')
+        .update(updateData)
+        .eq('id', budgetId)
+        .eq('user_id', user.id) // Garantir que só pode editar seus próprios orçamentos
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao atualizar orçamento:', error);
+        throw error;
+      }
+
+      // Mapear dados do banco para o formato do frontend
+      const updatedBudget: Orcamento = {
+        id: data.id,
+        nome: data.project_name || '',
+        concessionariaId: data.company_id || '',
+        company_id: data.company_id,
+        dataModificacao: data.updated_at ? new Date(data.updated_at).toISOString().split('T')[0] : '',
+        status: data.status as 'Em Andamento' | 'Finalizado',
+        postes: [],
+        ...(data.client_name && { clientName: data.client_name }),
+        ...(data.city && { city: data.city }),
+      };
+
+      // Atualizar o estado local
+      setBudgets(prev => prev.map(budget => 
+        budget.id === budgetId ? updatedBudget : budget
+      ));
+
+      // Se este orçamento está atualmente selecionado, atualizar também
+      if (currentOrcamento && currentOrcamento.id === budgetId) {
+        setCurrentOrcamento(updatedBudget);
+      }
+
+    } catch (error) {
+      console.error('Erro ao atualizar orçamento:', error);
+      throw error;
+    }
+  };
+
+  const deleteBudget = async (budgetId: string) => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('budgets')
+        .delete()
+        .eq('id', budgetId)
+        .eq('user_id', user.id); // Garantir que só pode excluir seus próprios orçamentos
+
+      if (error) {
+        console.error('Erro ao excluir orçamento:', error);
+        throw error;
+      }
+
+      // Remover do estado local
+      setBudgets(prev => prev.filter(budget => budget.id !== budgetId));
+
+      // Se este orçamento está atualmente selecionado, limpar seleção
+      if (currentOrcamento && currentOrcamento.id === budgetId) {
+        setCurrentOrcamento(null);
+        setCurrentView('dashboard');
+      }
+
+    } catch (error) {
+      console.error('Erro ao excluir orçamento:', error);
+      throw error;
+    }
+  };
+
   const uploadPlanImage = async (budgetId: string, file: File) => {
     if (!user) {
 
@@ -360,9 +462,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const filePath = `public/budgets/${budgetId}/${timestamp}_${sanitizedFileName}`;
 
       // b. Fazer o upload do arquivo para o bucket 'plans'
-      let uploadData;
-      
-      const { data: initialUploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('plans')
         .upload(filePath, file);
 
@@ -386,7 +486,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
           
           // Tentar fazer upload novamente
-          const { data: retryUploadData, error: retryUploadError } = await supabase.storage
+          const { error: retryUploadError } = await supabase.storage
             .from('plans')
             .upload(filePath, file);
 
@@ -394,14 +494,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             console.error('Erro ao fazer upload do arquivo após criar bucket:', retryUploadError);
             throw retryUploadError;
           }
-
-          uploadData = retryUploadData;
         } else {
           console.error('Erro ao fazer upload do arquivo:', uploadError);
           throw uploadError;
         }
-      } else {
-        uploadData = initialUploadData;
       }
 
 
@@ -556,6 +652,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 price
               )
             )
+          ),
+          post_materials (
+            id,
+            material_id,
+            quantity,
+            price_at_addition,
+            materials (
+              id,
+              code,
+              name,
+              description,
+              unit,
+              price
+            )
           )
         `)
         .eq('budget_id', budgetId)
@@ -580,13 +690,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         x_coord: post.x_coord || 0,
         y_coord: post.y_coord || 0,
         post_types: post.post_types ? {
-          id: post.post_types.id,
-          name: post.post_types.name || '',
-          code: post.post_types.code || undefined,
-          description: post.post_types.description || undefined,
-          shape: post.post_types.shape || undefined,
-          height_m: post.post_types.height_m || undefined,
-          price: post.post_types.price || 0
+          id: (post.post_types as any).id,
+          name: (post.post_types as any).name || '',
+          code: (post.post_types as any).code || undefined,
+          description: (post.post_types as any).description || undefined,
+          shape: (post.post_types as any).shape || undefined,
+          height_m: (post.post_types as any).height_m || undefined,
+          price: (post.post_types as any).price || 0
         } : null,
         post_item_groups: post.post_item_groups?.map(group => ({
           id: group.id,
@@ -598,12 +708,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
               quantity: material.quantity || 0,
               price_at_addition: material.price_at_addition || 0,
               materials: material.materials ? {
-                id: material.materials.id,
-                code: material.materials.code || '',
-                name: material.materials.name || '',
-                description: material.materials.description || undefined,
-                unit: material.materials.unit || '',
-                price: material.materials.price || 0
+                id: (material.materials as any).id,
+                code: (material.materials as any).code || '',
+                name: (material.materials as any).name || '',
+                description: (material.materials as any).description || undefined,
+                unit: (material.materials as any).unit || '',
+                price: (material.materials as any).price || 0
               } : {
                 id: '',
                 code: '',
@@ -614,6 +724,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
               }
             };
           }) || []
+        })) || [],
+        post_materials: post.post_materials?.map(material => ({
+          id: material.id,
+          post_id: post.id,
+          material_id: material.material_id,
+          quantity: material.quantity || 0,
+          price_at_addition: material.price_at_addition || 0,
+          materials: material.materials ? {
+            id: (material.materials as any).id,
+            code: (material.materials as any).code || '',
+            name: (material.materials as any).name || '',
+            description: (material.materials as any).description || undefined,
+            unit: (material.materials as any).unit || '',
+            price: (material.materials as any).price || 0
+          } : {
+            id: '',
+            code: '',
+            name: 'Material não encontrado',
+            description: undefined,
+            unit: '',
+            price: 0
+          }
         })) || []
       })) || [];
 
@@ -685,10 +817,220 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const addPostType = async (data: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => {
+    try {
+      // Primeiro, criar o material correspondente
+      const { data: newMaterial, error: materialError } = await supabase
+        .from('materials')
+        .insert({
+          name: data.name.trim(),
+          code: data.code?.trim() || null,
+          description: data.description?.trim() || null,
+          unit: 'unidade',
+          price: data.price,
+        })
+        .select()
+        .single();
+
+      if (materialError) {
+        console.error('Erro ao criar material para tipo de poste:', materialError);
+        throw materialError;
+      }
+
+      // Em seguida, criar o tipo de poste linkado ao material
+      const { data: newPostType, error: postTypeError } = await supabase
+        .from('post_types')
+        .insert({
+          name: data.name.trim(),
+          code: data.code?.trim() || null,
+          description: data.description?.trim() || null,
+          shape: data.shape?.trim() || null,
+          height_m: data.height_m || null,
+          price: data.price,
+          material_id: newMaterial.id, // Linkar com o material criado
+        })
+        .select()
+        .single();
+
+      if (postTypeError) {
+        console.error('Erro ao adicionar tipo de poste:', postTypeError);
+        // Se falhar ao criar post_type, deletar o material criado
+        await supabase.from('materials').delete().eq('id', newMaterial.id);
+        throw postTypeError;
+      }
+
+      // Mapear dados do banco para o formato do frontend e adicionar ao estado
+      const newPostTypeFormatted: PostType = {
+        id: newPostType.id,
+        name: newPostType.name || '',
+        code: newPostType.code || undefined,
+        description: newPostType.description || undefined,
+        shape: newPostType.shape || undefined,
+        height_m: newPostType.height_m || undefined,
+        price: parseFloat(newPostType.price) || 0,
+      };
+
+      setPostTypes(prev => [...prev, newPostTypeFormatted].sort((a, b) => a.name.localeCompare(b.name)));
+      
+      // Atualizar também a lista de materiais
+      const newMaterialFormatted = {
+        id: newMaterial.id,
+        codigo: newMaterial.code || '',
+        descricao: newMaterial.name || '',
+        precoUnit: parseFloat(newMaterial.price) || 0,
+        unidade: newMaterial.unit || '',
+      };
+      setMateriais(prev => [...prev, newMaterialFormatted]);
+    } catch (error) {
+      console.error('Erro ao adicionar tipo de poste:', error);
+      throw error;
+    }
+  };
+
+  const updatePostType = async (id: string, data: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => {
+    try {
+      // Primeiro, buscar o post_type para obter o material_id
+      const { data: currentPostType, error: fetchError } = await supabase
+        .from('post_types')
+        .select('material_id')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) {
+        console.error('Erro ao buscar tipo de poste:', fetchError);
+        throw fetchError;
+      }
+
+      // Atualizar o material correspondente (se existir)
+      if (currentPostType.material_id) {
+        const { error: materialError } = await supabase
+          .from('materials')
+          .update({
+            name: data.name.trim(),
+            code: data.code?.trim() || null,
+            description: data.description?.trim() || null,
+            price: data.price,
+          })
+          .eq('id', currentPostType.material_id);
+
+        if (materialError) {
+          console.error('Erro ao atualizar material do tipo de poste:', materialError);
+          throw materialError;
+        }
+      }
+
+      // Atualizar o post_type
+      const { data: updatedPostType, error: postTypeError } = await supabase
+        .from('post_types')
+        .update({
+          name: data.name.trim(),
+          code: data.code?.trim() || null,
+          description: data.description?.trim() || null,
+          shape: data.shape?.trim() || null,
+          height_m: data.height_m || null,
+          price: data.price,
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (postTypeError) {
+        console.error('Erro ao atualizar tipo de poste:', postTypeError);
+        throw postTypeError;
+      }
+
+      // Mapear dados do banco para o formato do frontend e atualizar o estado
+      const updatedPostTypeFormatted: PostType = {
+        id: updatedPostType.id,
+        name: updatedPostType.name || '',
+        code: updatedPostType.code || undefined,
+        description: updatedPostType.description || undefined,
+        shape: updatedPostType.shape || undefined,
+        height_m: updatedPostType.height_m || undefined,
+        price: parseFloat(updatedPostType.price) || 0,
+      };
+
+      setPostTypes(prev => 
+        prev.map(postType => postType.id === id ? updatedPostTypeFormatted : postType)
+           .sort((a, b) => a.name.localeCompare(b.name))
+      );
+
+      // Atualizar também a lista de materiais se existir material vinculado
+      if (currentPostType.material_id) {
+        const updatedMaterialFormatted = {
+          id: currentPostType.material_id,
+          codigo: data.code?.trim() || '',
+          descricao: data.name.trim(),
+          precoUnit: data.price,
+          unidade: 'unidade',
+        };
+        
+        setMateriais(prev => 
+          prev.map(material => 
+            material.id === currentPostType.material_id ? updatedMaterialFormatted : material
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar tipo de poste:', error);
+      throw error;
+    }
+  };
+
+  const deletePostType = async (id: string) => {
+    try {
+      // Primeiro, buscar o material_id antes de deletar
+      const { data: postTypeData, error: fetchError } = await supabase
+        .from('post_types')
+        .select('material_id')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) {
+        console.error('Erro ao buscar tipo de poste para deletar:', fetchError);
+        throw fetchError;
+      }
+
+      // Deletar o post_type (o ON DELETE CASCADE vai deletar o material automaticamente)
+      const { error: deleteError } = await supabase
+        .from('post_types')
+        .delete()
+        .eq('id', id);
+
+      if (deleteError) {
+        console.error('Erro ao excluir tipo de poste:', deleteError);
+        throw deleteError;
+      }
+
+      // Remover do estado local
+      setPostTypes(prev => prev.filter(postType => postType.id !== id));
+      
+      // Remover também da lista de materiais se existir material vinculado
+      if (postTypeData.material_id) {
+        setMateriais(prev => prev.filter(material => material.id !== postTypeData.material_id));
+      }
+    } catch (error) {
+      console.error('Erro ao excluir tipo de poste:', error);
+      throw error;
+    }
+  };
+
   const addPostToBudget = async (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => {
     try {
       console.log(`🔄 === SUPABASE INSERT INICIADO ===`);
       console.log(`📤 Dados sendo enviados para Supabase:`, newPostData);
+      
+      // Primeiro, buscar o material_id do tipo de poste
+      const { data: postTypeData, error: postTypeError } = await supabase
+        .from('post_types')
+        .select('material_id, price')
+        .eq('id', newPostData.post_type_id)
+        .single();
+
+      if (postTypeError) {
+        console.error('Erro ao buscar dados do tipo de poste:', postTypeError);
+        throw postTypeError;
+      }
       
       const { data, error } = await supabase
         .from('budget_posts')
@@ -720,7 +1062,68 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       console.log(`✅ SUPABASE INSERT SUCESSO - dados retornados:`, data);
 
-      // Mapear o novo poste para o formato dos budgetDetails
+      // Primeiro, criar o material avulso no banco de dados (se existe material_id)
+      let looseMaterialData = null;
+      if (postTypeData.material_id) {
+        console.log(`🔄 === ADICIONANDO MATERIAL AVULSO ===`);
+        console.log(`📝 Post ID: ${data.id}`);
+        console.log(`📝 Material ID: ${postTypeData.material_id}`);
+        console.log(`📝 Quantidade: 1`);
+        console.log(`📝 Preço: ${postTypeData.price}`);
+        
+        // Verificar se já existe esse material avulso para evitar duplicação
+        const { data: existingMaterial, error: checkError } = await supabase
+          .from('post_materials')
+          .select('id')
+          .eq('post_id', data.id)
+          .eq('material_id', postTypeData.material_id)
+          .single();
+
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = row not found
+          console.error('❌ Erro ao verificar material avulso existente:', checkError);
+        }
+
+        // Só adicionar se não existir
+        if (!existingMaterial) {
+          console.log(`🚀 Inserindo material avulso no banco...`);
+          const { data: materialData, error: materialError } = await supabase
+            .from('post_materials')
+            .insert({
+              post_id: data.id,
+              material_id: postTypeData.material_id,
+              quantity: 1,
+              price_at_addition: postTypeData.price,
+            })
+            .select(`
+              id,
+              material_id,
+              quantity,
+              price_at_addition,
+              materials (
+                id,
+                code,
+                name,
+                description,
+                unit,
+                price
+              )
+            `)
+            .single();
+
+          if (materialError) {
+            console.error('❌ Erro ao inserir material avulso:', materialError);
+          } else {
+            console.log(`✅ Material avulso inserido com sucesso:`, materialData);
+            looseMaterialData = materialData;
+          }
+        } else {
+          console.log(`ℹ️ Poste já existe como material avulso, pulando...`);
+        }
+      } else {
+        console.log(`⚠️ Post type não tem material_id - não será adicionado aos materiais avulsos`);
+      }
+
+      // Mapear o novo poste para o formato dos budgetDetails (incluindo material avulso se foi criado)
       const newPostDetail: BudgetPostDetail = {
         id: data.id,
         name: data.name || '',
@@ -735,17 +1138,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
           height_m: data.post_types.height_m || undefined,
           price: data.post_types.price || 0
         } : null,
-        post_item_groups: [] // Novo poste não tem grupos ainda
+        post_item_groups: [], // Novo poste não tem grupos ainda
+        post_materials: looseMaterialData ? [{
+          id: looseMaterialData.id,
+          post_id: data.id,
+          material_id: looseMaterialData.material_id,
+          quantity: looseMaterialData.quantity,
+          price_at_addition: looseMaterialData.price_at_addition,
+          materials: looseMaterialData.materials ? {
+            id: (looseMaterialData.materials as any).id,
+            code: (looseMaterialData.materials as any).code || '',
+            name: (looseMaterialData.materials as any).name || '',
+            description: (looseMaterialData.materials as any).description || undefined,
+            unit: (looseMaterialData.materials as any).unit || '',
+            price: (looseMaterialData.materials as any).price || 0
+          } : {
+            id: '',
+            code: '',
+            name: 'Material não encontrado',
+            description: undefined,
+            unit: '',
+            price: 0
+          }
+        }] : [] // Lista vazia se não foi criado material avulso
       };
 
-      console.log(`🎯 Novo post mapeado:`, newPostDetail);
+      console.log(`🎯 Novo post mapeado com material avulso:`, {
+        postId: newPostDetail.id,
+        postName: newPostDetail.name,
+        materialsCount: newPostDetail.post_materials.length,
+        materials: newPostDetail.post_materials.map(m => m.materials?.name || 'N/A')
+      });
 
       // Adicionar o novo poste ao estado budgetDetails de forma imutável
       setBudgetDetails(prevDetails => {
         // Verificação de segurança: Se não houver um orçamento carregado,
         // não faz nada e avisa no console.
         if (!prevDetails) {
-          console.error("Erro Crítico: Tentativa de adicionar poste sem um orçamento completamente carregado.");
+          console.error("❌ Erro Crítico: Tentativa de adicionar poste sem um orçamento completamente carregado.");
           return prevDetails;
         }
 
@@ -759,7 +1189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         
         console.log(`✅ Estado atualizado - posts depois:`, updatedDetails.posts.length);
-        console.log(`📍 Último post adicionado:`, updatedDetails.posts[updatedDetails.posts.length - 1]);
+        console.log(`🎉 Poste adicionado com sucesso! Materiais avulsos: ${newPostDetail.post_materials.length}`);
         
         return updatedDetails;
       });
@@ -835,9 +1265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           post_item_group_id: newGroupInstance.id,
           material_id: templateMaterial.material_id,
           quantity: templateMaterial.quantity,
-          price_at_addition: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0] 
-            ? templateMaterial.materials[0].price 
-            : 0,
+          price_at_addition: (templateMaterial.materials as any)?.price || 0,
         }));
 
         const { error: batchInsertError } = await supabase
@@ -868,19 +1296,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 post_item_group_materials: templateMaterials?.map(templateMaterial => ({
                   material_id: templateMaterial.material_id,
                   quantity: templateMaterial.quantity,
-                  price_at_addition: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
-                    ? templateMaterial.materials[0].price
-                    : 0,
-                  materials: Array.isArray(templateMaterial.materials) && templateMaterial.materials[0]
-                    ? templateMaterial.materials[0]
-                    : {
-                        id: '',
-                        code: '',
-                        name: 'Material não encontrado',
-                        description: undefined,
-                        unit: '',
-                        price: 0
-                      }
+                  price_at_addition: (templateMaterial.materials as any)?.price || 0,
+                  materials: (templateMaterial.materials as any) || {
+                    id: '',
+                    code: '',
+                    name: 'Material não encontrado',
+                    description: undefined,
+                    unit: '',
+                    price: 0
+                  }
                 })) || []
               };
 
@@ -1019,6 +1443,167 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Função para adicionar material avulso ao poste (usado quando usuário adiciona manualmente)
+  const addLooseMaterialToPost = async (postId: string, materialId: string, quantity: number, price: number) => {
+    try {
+      const { data, error } = await supabase
+        .from('post_materials')
+        .insert({
+          post_id: postId,
+          material_id: materialId,
+          quantity,
+          price_at_addition: price,
+        })
+        .select(`
+          id,
+          material_id,
+          quantity,
+          price_at_addition,
+          materials (
+            id,
+            code,
+            name,
+            description,
+            unit,
+            price
+          )
+        `)
+        .single();
+
+      if (error) {
+        console.error('Erro ao inserir material avulso:', error);
+        throw error;
+      }
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          posts: prev.posts.map(post => {
+            if (post.id === postId) {
+              const newLooseMaterial = {
+                id: data.id,
+                post_id: postId,
+                material_id: data.material_id,
+                quantity: data.quantity,
+                price_at_addition: data.price_at_addition,
+                materials: data.materials ? {
+                  id: (data.materials as any).id,
+                  code: (data.materials as any).code || '',
+                  name: (data.materials as any).name || '',
+                  description: (data.materials as any).description || undefined,
+                  unit: (data.materials as any).unit || '',
+                  price: (data.materials as any).price || 0
+                } : {
+                  id: '',
+                  code: '',
+                  name: 'Material não encontrado',
+                  description: undefined,
+                  unit: '',
+                  price: 0
+                }
+              };
+
+              return {
+                ...post,
+                post_materials: [...post.post_materials, newLooseMaterial]
+              };
+            }
+            return post;
+          })
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar material avulso:', error);
+      throw error;
+    }
+  };
+
+  // Função para atualizar quantidade de material avulso
+  const updateLooseMaterialQuantity = async (postMaterialId: string, newQuantity: number) => {
+    try {
+
+
+      // Validar quantidade
+      if (newQuantity < 0) {
+        throw new Error('Quantidade não pode ser negativa');
+      }
+
+      const { error } = await supabase
+        .from('post_materials')
+        .update({ quantity: newQuantity })
+        .eq('id', postMaterialId);
+
+      if (error) {
+        console.error('Erro ao atualizar quantidade do material avulso:', error);
+        throw error;
+      }
+
+
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          posts: prev.posts.map(post => ({
+            ...post,
+            post_materials: post.post_materials.map(material => {
+              if (material.id === postMaterialId) {
+                return {
+                  ...material,
+                  quantity: newQuantity
+                };
+              }
+              return material;
+            })
+          }))
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar quantidade do material avulso:', error);
+      throw error;
+    }
+  };
+
+  // Função para remover material avulso do poste
+  const removeLooseMaterialFromPost = async (postMaterialId: string) => {
+    try {
+
+
+      const { error } = await supabase
+        .from('post_materials')
+        .delete()
+        .eq('id', postMaterialId);
+
+      if (error) {
+        console.error('Erro ao remover material avulso:', error);
+        throw error;
+      }
+
+
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          posts: prev.posts.map(post => ({
+            ...post,
+            post_materials: post.post_materials.filter(material => material.id !== postMaterialId)
+          }))
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao remover material avulso:', error);
+      throw error;
+    }
+  };
+
   // Funções para concessionárias
   const fetchUtilityCompanies = useCallback(async () => {
     try {
@@ -1052,6 +1637,88 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoadingCompanies(false);
     }
   }, []);
+
+  const addUtilityCompany = async (data: { name: string }) => {
+    try {
+      const { data: newCompany, error } = await supabase
+        .from('utility_companies')
+        .insert({
+          name: data.name.trim(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao adicionar concessionária:', error);
+        throw error;
+      }
+
+      // Mapear dados do banco para o formato do frontend e adicionar ao estado
+      const newUtilityCompany: Concessionaria = {
+        id: newCompany.id,
+        nome: newCompany.name || '',
+        sigla: newCompany.name || '',
+      };
+
+      setUtilityCompanies(prev => [...prev, newUtilityCompany].sort((a, b) => a.nome.localeCompare(b.nome)));
+    } catch (error) {
+      console.error('Erro ao adicionar concessionária:', error);
+      throw error;
+    }
+  };
+
+  const updateUtilityCompany = async (id: string, data: { name: string }) => {
+    try {
+      const { data: updatedCompany, error } = await supabase
+        .from('utility_companies')
+        .update({
+          name: data.name.trim(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao atualizar concessionária:', error);
+        throw error;
+      }
+
+      // Mapear dados do banco para o formato do frontend e atualizar o estado
+      const updatedUtilityCompany: Concessionaria = {
+        id: updatedCompany.id,
+        nome: updatedCompany.name || '',
+        sigla: updatedCompany.name || '',
+      };
+
+      setUtilityCompanies(prev => 
+        prev.map(company => company.id === id ? updatedUtilityCompany : company)
+           .sort((a, b) => a.nome.localeCompare(b.nome))
+      );
+    } catch (error) {
+      console.error('Erro ao atualizar concessionária:', error);
+      throw error;
+    }
+  };
+
+  const deleteUtilityCompany = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('utility_companies')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Erro ao excluir concessionária:', error);
+        throw error;
+      }
+
+      // Remover do estado local
+      setUtilityCompanies(prev => prev.filter(company => company.id !== id));
+    } catch (error) {
+      console.error('Erro ao excluir concessionária:', error);
+      throw error;
+    }
+  };
 
   // Funções para grupos de itens
   const fetchItemGroups = useCallback(async (companyId: string) => {
@@ -1309,6 +1976,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Funções de orçamentos
       fetchBudgets,
       addBudget,
+      updateBudget,
+      deleteBudget,
       fetchBudgetDetails,
       uploadPlanImage,
       deletePlanImage,
@@ -1321,12 +1990,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       removeGroupFromPost,
       updateMaterialQuantityInPostGroup,
       
+      // Funções para materiais avulsos
+      addLooseMaterialToPost,
+      updateLooseMaterialQuantity,
+      removeLooseMaterialFromPost,
+      
       // Funções para concessionárias e grupos
       fetchUtilityCompanies,
+      addUtilityCompany,
+      updateUtilityCompany,
+      deleteUtilityCompany,
       fetchItemGroups,
       addGroup,
       updateGroup,
       deleteGroup,
+      
+      // Funções para tipos de poste
+      addPostType,
+      updatePostType,
+      deletePostType,
       
       // Funções locais (legacy)
       addGrupoItem,

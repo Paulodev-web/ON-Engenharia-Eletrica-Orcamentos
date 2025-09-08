@@ -16,6 +16,8 @@ export function Layout({ children }: LayoutProps) {
       case 'configuracoes': return 'Painel de Configurações';
       case 'materiais': return 'Gerenciar Materiais';
       case 'grupos': return 'Gerenciar Grupos de Itens';
+      case 'concessionarias': return 'Gerenciar Concessionárias';
+      case 'tipos-postes': return 'Gerenciar Tipos de Poste';
       case 'editor-grupo': return 'Editor de Grupo de Itens';
       default: return 'ON Engenharia Elétrica';
     }
@@ -34,7 +36,7 @@ export function Layout({ children }: LayoutProps) {
                   onClick={() => {
                     if (currentView === 'orcamento') {
                       setCurrentView('dashboard');
-                    } else if (['materiais', 'grupos', 'editor-grupo'].includes(currentView)) {
+                    } else if (['materiais', 'grupos', 'concessionarias', 'tipos-postes', 'editor-grupo'].includes(currentView)) {
                       setCurrentView('configuracoes');
                     } else {
                       setCurrentView('dashboard');

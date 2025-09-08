@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { CanvasVisual } from './CanvasVisual';
 import { PainelConsolidado } from './PainelConsolidado';
-import { Poste, TipoPoste, BudgetDetails } from '../types';
+import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../types';
 import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, Settings, ArrowLeft, Eye } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
@@ -27,7 +27,16 @@ export function AreaTrabalho() {
     fetchItemGroups,
     removeGroupFromPost,
     updateMaterialQuantityInPostGroup,
-    updateOrcamento
+    updateOrcamento,
+    
+    // Funções de materiais avulsos
+    addLooseMaterialToPost,
+    updateLooseMaterialQuantity,
+    removeLooseMaterialFromPost,
+    
+    // Catálogo de materiais
+    materiais,
+    fetchMaterials
     // Adicione aqui quaisquer outras funções/estados do context que a UI usa
   } = useApp();
   
@@ -52,12 +61,14 @@ export function AreaTrabalho() {
     if (budgetId) {
       fetchBudgetDetails(budgetId);
       fetchPostTypes(); // Sempre busca o catálogo de tipos de poste
+      fetchMaterials(); // Sempre busca o catálogo de materiais para "Materiais Avulsos"
       // Se tivermos um ID de empresa, busca os grupos de itens
       if (companyId) {
         fetchItemGroups(companyId);
       }
     }
-  }, [currentOrcamento?.id, currentOrcamento?.company_id, fetchBudgetDetails, fetchPostTypes, fetchItemGroups]); // Dependências primitivas e estáveis
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrcamento?.id, currentOrcamento?.company_id]); // Funções useCallback são estáveis
   
   // Função para ser chamada pelo clique direito no canvas
   const handleRightClick = useCallback((coords: { x: number, y: number }) => {
@@ -350,6 +361,10 @@ export function AreaTrabalho() {
           handleDeletePostFromDatabase={handleDeletePostFromDatabase}
           itemGroups={itemGroups}
           updateMaterialQuantityInPostGroup={updateMaterialQuantityInPostGroup}
+          materiais={materiais}
+          addLooseMaterialToPost={addLooseMaterialToPost}
+          updateLooseMaterialQuantity={updateLooseMaterialQuantity}
+          removeLooseMaterialFromPost={removeLooseMaterialFromPost}
         />
       </div>
 
@@ -473,6 +488,10 @@ interface PostListAccordionProps {
   handleDeletePostFromDatabase: (postId: string, postName: string) => Promise<void>;
   itemGroups: any[];
   updateMaterialQuantityInPostGroup: (postGroupId: string, materialId: string, newQuantity: number) => Promise<void>;
+  materiais: Material[];
+  addLooseMaterialToPost: (postId: string, materialId: string, quantity: number, price: number) => Promise<void>;
+  updateLooseMaterialQuantity: (postMaterialId: string, newQuantity: number) => Promise<void>;
+  removeLooseMaterialFromPost: (postMaterialId: string) => Promise<void>;
 }
 
 function PostListAccordion({ 
@@ -486,9 +505,18 @@ function PostListAccordion({
   handleRemoveGrupo,
   handleDeletePostFromDatabase,
   itemGroups,
-  updateMaterialQuantityInPostGroup
+  updateMaterialQuantityInPostGroup,
+  materiais,
+  addLooseMaterialToPost,
+  updateLooseMaterialQuantity,
+  removeLooseMaterialFromPost
 }: PostListAccordionProps) {
   const postsToDisplay = budgetDetails?.posts || [];
+  
+  // Estados locais para materiais avulsos
+  const [materialSearchTerm, setMaterialSearchTerm] = useState('');
+  const [addingLooseMaterial, setAddingLooseMaterial] = useState(false);
+  const [removingLooseMaterial, setRemovingLooseMaterial] = useState<string | null>(null);
   
 
   
@@ -500,6 +528,44 @@ function PostListAccordion({
     // itemGroups já vem filtrados pela empresa na função fetchItemGroups
     return g.nome.toLowerCase().includes(searchTerm.toLowerCase());
   });
+  
+  // Filtrar materiais para busca de materiais avulsos
+  const materiaisFiltrados = materiais.filter(material =>
+    material.descricao.toLowerCase().includes(materialSearchTerm.toLowerCase()) ||
+    material.codigo.toLowerCase().includes(materialSearchTerm.toLowerCase())
+  );
+  
+  // Função para adicionar material avulso
+  const handleAddLooseMaterial = async (postId: string, materialId: string) => {
+    const material = materiais.find(m => m.id === materialId);
+    if (!material) return;
+    
+    setAddingLooseMaterial(true);
+    try {
+      await addLooseMaterialToPost(postId, materialId, 1, material.precoUnit);
+      setMaterialSearchTerm('');
+    } catch (error) {
+      alert('Erro ao adicionar material avulso. Tente novamente.');
+    } finally {
+      setAddingLooseMaterial(false);
+    }
+  };
+  
+  // Função para remover material avulso
+  const handleRemoveLooseMaterial = async (postMaterialId: string) => {
+    if (!window.confirm('Tem certeza que deseja remover este material avulso?')) {
+      return;
+    }
+    
+    setRemovingLooseMaterial(postMaterialId);
+    try {
+      await removeLooseMaterialFromPost(postMaterialId);
+    } catch (error) {
+      alert('Erro ao remover material avulso. Tente novamente.');
+    } finally {
+      setRemovingLooseMaterial(null);
+    }
+  };
   
 
 
@@ -546,20 +612,29 @@ function PostListAccordion({
                         <span className="text-xs text-gray-400">
                           x:{post.x_coord}, y:{post.y_coord}
                         </span>
-                        <button
+                        <div
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeletePostFromDatabase(post.id, post.name);
                           }}
-                          className="text-red-600 hover:text-red-900 disabled:opacity-50"
-                          disabled={deletingPost === post.id}
+                          className="text-red-600 hover:text-red-900 cursor-pointer"
+                          title="Excluir poste"
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDeletePostFromDatabase(post.id, post.name);
+                            }
+                          }}
                         >
                           {deletingPost === post.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : (
                             <Trash2 className="h-3 w-3" />
                           )}
-                        </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -617,21 +692,29 @@ function PostListAccordion({
                                   <Package className="h-4 w-4 text-green-600" />
                                   <span className="text-sm font-medium">{group.name} ({group.post_item_group_materials?.length || 0} itens)</span>
                                 </div>
-                                <button
+                                <div
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleRemoveGrupo(group.id, true);
                                   }}
-                                  className="text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
-                                  disabled={removingGroup === group.id}
+                                  className="text-red-500 hover:text-red-700 transition-colors cursor-pointer disabled:opacity-50"
                                   title="Remover grupo"
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleRemoveGrupo(group.id, true);
+                                    }
+                                  }}
                                 >
                                   {removingGroup === group.id ? (
                                     <Loader2 className="h-3 w-3 animate-spin" />
                                   ) : (
                                     <X className="h-3 w-3" />
                                   )}
-                                </button>
+                                </div>
                               </div>
                             </AccordionTrigger>
                             <AccordionContent>
@@ -672,6 +755,104 @@ function PostListAccordion({
                         Nenhum grupo adicionado a este poste
                       </div>
                     )}
+                    
+                    {/* Seção de Materiais Avulsos */}
+                    <div className="mt-6 border-t pt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
+                        <Package className="h-4 w-4 mr-2 text-orange-600" />
+                        Materiais Avulsos ({post.post_materials?.length || 0} itens)
+                      </h4>
+                      
+                      {/* Seção para Adicionar Material Avulso */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Adicionar Material Avulso
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={materialSearchTerm}
+                            onChange={(e) => setMaterialSearchTerm(e.target.value)}
+                            placeholder="Buscar materiais por nome ou código..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            disabled={addingLooseMaterial}
+                          />
+                          {addingLooseMaterial && (
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                            </div>
+                          )}
+                          {materialSearchTerm && materiaisFiltrados.length > 0 && !addingLooseMaterial && (
+                            <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto z-20 shadow-lg">
+                              {materiaisFiltrados.slice(0, 10).map((material) => (
+                                <button
+                                  key={material.id}
+                                  onClick={() => handleAddLooseMaterial(post.id, material.id)}
+                                  className="w-full text-left px-3 py-2 hover:bg-gray-100 transition-colors border-b last:border-b-0"
+                                  disabled={addingLooseMaterial}
+                                >
+                                  <div className="font-medium text-sm">{material.descricao}</div>
+                                  <div className="text-xs text-gray-500">
+                                    {material.codigo} • R$ {material.precoUnit.toFixed(2)} / {material.unidade}
+                                  </div>
+                                </button>
+                              ))}
+                              {materiaisFiltrados.length > 10 && (
+                                <div className="px-3 py-2 text-xs text-gray-500 text-center bg-gray-50">
+                                  ... e mais {materiaisFiltrados.length - 10} materiais
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Lista de Materiais Avulsos */}
+                      {post.post_materials && post.post_materials.length > 0 ? (
+                        <div className="space-y-3">
+                          {post.post_materials.map((material: PostMaterial) => (
+                            <div key={material.id} className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                              <div className="flex justify-between items-center">
+                                <div className="flex-1">
+                                  <div className="text-sm font-medium text-gray-900">{material.materials.name}</div>
+                                  <div className="text-xs text-gray-500">{material.materials.code}</div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <QuantityEditor
+                                    postGroupId={material.id}
+                                    materialId={material.material_id}
+                                    currentQuantity={material.quantity}
+                                    unit={material.materials.unit}
+                                    onUpdateQuantity={async (postMaterialId, _, newQuantity) => {
+                                      await updateLooseMaterialQuantity(postMaterialId, newQuantity);
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => handleRemoveLooseMaterial(material.id)}
+                                    className="text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
+                                    disabled={removingLooseMaterial === material.id}
+                                    title="Remover material avulso"
+                                  >
+                                    {removingLooseMaterial === material.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <X className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-600 mt-2 font-medium">
+                                R$ {material.price_at_addition.toFixed(2)} x {material.quantity} = R$ {(material.price_at_addition * material.quantity).toFixed(2)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500 text-center py-4">
+                          Nenhum material avulso adicionado a este poste
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </AccordionContent>
               </AccordionItem>

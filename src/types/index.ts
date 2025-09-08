@@ -83,6 +83,7 @@ export interface BudgetPostDetail {
     price: number;
   } | null;
   post_item_groups: PostItemGroupDetail[];
+  post_materials: PostMaterial[];
 }
 
 export interface PostItemGroupDetail {
@@ -93,6 +94,23 @@ export interface PostItemGroupDetail {
 }
 
 export interface PostItemGroupMaterial {
+  material_id: string;
+  quantity: number;
+  price_at_addition: number;
+  materials: {
+    id: string;
+    code: string;
+    name: string;
+    description?: string;
+    unit: string;
+    price: number;
+  };
+}
+
+// Interface para materiais avulsos (post_materials)
+export interface PostMaterial {
+  id: string;
+  post_id: string;
   material_id: string;
   quantity: number;
   price_at_addition: number;

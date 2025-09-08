@@ -54,6 +54,33 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
           }
         });
       });
+      
+      // Percorrer todos os materiais avulsos do poste (incluindo o próprio poste)
+      post.post_materials.forEach(material => {
+        const materialId = material.material_id;
+        const materialData = material.materials;
+
+        if (materiaisMap.has(materialId)) {
+          // Material já existe, somar quantidade
+          const existingMaterial = materiaisMap.get(materialId)!;
+          existingMaterial.quantidade += material.quantity;
+          existingMaterial.subtotal = existingMaterial.quantidade * existingMaterial.precoUnit;
+        } else {
+          // Novo material, adicionar ao mapa
+          materiaisMap.set(materialId, {
+            materialId,
+            codigo: materialData.code || '',
+            nome: materialData.name || 'Material sem nome',
+            unidade: materialData.unit || '',
+            precoUnit: material.price_at_addition || 0,
+            quantidade: material.quantity,
+            subtotal: (material.price_at_addition || 0) * material.quantity,
+          });
+        }
+      });
+
+      // REMOVIDO: Lógica duplicada que somava post.post_types
+      // Agora os postes são automaticamente incluídos via post_materials
     });
 
     // Converter mapa para array e ordenar por nome
