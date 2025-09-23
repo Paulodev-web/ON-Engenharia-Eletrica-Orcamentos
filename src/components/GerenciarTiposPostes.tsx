@@ -97,8 +97,8 @@ export function GerenciarTiposPostes() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col h-full space-y-6">
+      <div className="flex justify-between items-center flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Gerenciar Tipos de Poste</h2>
           <p className="text-gray-600">Cadastre e gerencie o catálogo de tipos de postes</p>
@@ -129,7 +129,7 @@ export function GerenciarTiposPostes() {
 
       {/* Message feedback */}
       {message && (
-        <div className={`p-4 rounded-lg ${
+        <div className={`p-4 rounded-lg flex-shrink-0 ${
           message.type === 'success' 
             ? 'bg-green-50 text-green-700 border border-green-200' 
             : 'bg-red-50 text-red-700 border border-red-200'
@@ -146,10 +146,10 @@ export function GerenciarTiposPostes() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow flex-1 flex flex-col overflow-hidden">
         {/* Loading State */}
         {loadingPostTypes ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex-1 flex items-center justify-center">
             <div className="flex flex-col items-center space-y-3">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
               <p className="text-gray-500">Carregando tipos de poste...</p>
@@ -157,9 +157,9 @@ export function GerenciarTiposPostes() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="flex-1 overflow-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Nome
@@ -235,15 +235,17 @@ export function GerenciarTiposPostes() {
 
             {/* Empty State */}
             {postTypes.length === 0 && !loadingPostTypes && (
-              <div className="text-center py-12">
-                <TowerControl className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">Nenhum tipo de poste cadastrado.</p>
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  Cadastrar primeiro tipo de poste
-                </button>
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <TowerControl className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-4">Nenhum tipo de poste cadastrado.</p>
+                  <button
+                    onClick={() => setShowModal(true)}
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Cadastrar primeiro tipo de poste
+                  </button>
+                </div>
               </div>
             )}
           </>

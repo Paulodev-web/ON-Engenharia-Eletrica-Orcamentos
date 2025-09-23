@@ -20,6 +20,7 @@ export default defineConfig({
     },
   },
   define: {
-    global: {},
+    global: 'globalThis',
   },
+  assetsInclude: ['**/*.pdf'],
 });

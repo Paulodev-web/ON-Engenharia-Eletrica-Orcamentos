@@ -7,7 +7,12 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { Orcamento, Poste, TipoPoste, BudgetPostDetail, BudgetDetails } from '../types';
 import { PostIcon } from './PostIcon';
 
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// Configuração do worker do PDF
+// Tenta usar CDN primeiro, com fallback para arquivo local
+pdfjs.GlobalWorkerOptions.workerSrc = 
+  import.meta.env.PROD 
+    ? `https://unpkg.com/pdfjs-dist@5.3.93/build/pdf.worker.min.mjs`
+    : `/pdf.worker.min.mjs`;
 
 interface CanvasVisualProps {
   orcamento: Orcamento;

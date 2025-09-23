@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, ArrowLeft } from 'lucide-react';
+import { Sidebar } from './Sidebar';
 import { useApp } from '../contexts/AppContext';
 
 interface LayoutProps {
@@ -7,11 +7,11 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { currentView, setCurrentView } = useApp();
+  const { currentView } = useApp();
 
-  const getTitle = () => {
+  const getPageTitle = () => {
     switch (currentView) {
-      case 'dashboard': return 'ON Engenharia Elétrica - Sistema de Orçamentos';
+      case 'dashboard': return 'Dashboard';
       case 'orcamento': return 'Área de Trabalho do Orçamento';
       case 'configuracoes': return 'Painel de Configurações';
       case 'materiais': return 'Gerenciar Materiais';
@@ -23,51 +23,52 @@ export function Layout({ children }: LayoutProps) {
     }
   };
 
-  const showBackButton = currentView !== 'dashboard';
+  const getPageDescription = () => {
+    switch (currentView) {
+      case 'dashboard': return 'Visão geral dos seus orçamentos e projetos';
+      case 'orcamento': return 'Crie e edite orçamentos de projetos elétricos';
+      case 'configuracoes': return 'Configure as opções do sistema';
+      case 'materiais': return 'Gerencie o catálogo de materiais disponíveis';
+      case 'grupos': return 'Organize materiais em grupos reutilizáveis';
+      case 'concessionarias': return 'Cadastre e gerencie concessionárias de energia';
+      case 'tipos-postes': return 'Configure os tipos de postes disponíveis';
+      case 'editor-grupo': return 'Edite os detalhes do grupo selecionado';
+      default: return '';
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              {showBackButton && (
-                <button
-                  onClick={() => {
-                    if (currentView === 'orcamento') {
-                      setCurrentView('dashboard');
-                    } else if (['materiais', 'grupos', 'concessionarias', 'tipos-postes', 'editor-grupo'].includes(currentView)) {
-                      setCurrentView('configuracoes');
-                    } else {
-                      setCurrentView('dashboard');
-                    }
-                  }}
-                  className="p-2 rounded-md hover:bg-gray-100 transition-colors"
-                >
-                  <ArrowLeft className="h-5 w-5 text-gray-600" />
-                </button>
-              )}
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">{getTitle()}</h1>
+    <div className="h-screen bg-gray-50 overflow-hidden">
+      <div className="flex h-full">
+        {/* Sidebar */}
+        <Sidebar />
+        
+        {/* Conteúdo Principal */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Header da página */}
+          <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
+            <div className="px-4 sm:px-6 lg:px-8 py-6">
+              <div className="lg:ml-16"> {/* Margem para compensar botão mobile apenas */}
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {getPageTitle()}
+                </h1>
+                {getPageDescription() && (
+                  <p className="mt-1 text-sm text-gray-500">
+                    {getPageDescription()}
+                  </p>
+                )}
               </div>
             </div>
-            
-            {currentView === 'dashboard' && (
-              <button
-                onClick={() => setCurrentView('configuracoes')}
-                className="flex items-center space-x-2 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                <Settings className="h-5 w-5" />
-                <span>Configurações</span>
-              </button>
-            )}
-          </div>
+          </header>
+          
+          {/* Conteúdo da página - Com scroll interno */}
+          <main className="flex-1 px-4 sm:px-6 lg:px-8 py-4 overflow-y-auto">
+            <div className="lg:ml-16 h-full"> {/* Margem para compensar botão mobile apenas */}
+              {children}
+            </div>
+          </main>
         </div>
-      </header>
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {children}
-      </main>
+      </div>
     </div>
   );
 }

@@ -73,8 +73,8 @@ export function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col h-full space-y-6">
+      <div className="flex justify-between items-center flex-shrink-0">
         <h2 className="text-2xl font-bold text-gray-900">Meus Orçamentos</h2>
         <button
           onClick={() => setShowModal(true)}
@@ -85,10 +85,10 @@ export function Dashboard() {
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-lg shadow flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 sticky top-0">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Nome do Projeto
@@ -201,14 +201,16 @@ export function Dashboard() {
         </div>
         
         {!loadingBudgets && budgets.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">Nenhum orçamento encontrado.</p>
-            <button
-              onClick={() => setShowModal(true)}
-              className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Criar seu primeiro orçamento
-            </button>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-gray-500">Nenhum orçamento encontrado.</p>
+              <button
+                onClick={() => setShowModal(true)}
+                className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Criar seu primeiro orçamento
+              </button>
+            </div>
           </div>
         )}
       </div>

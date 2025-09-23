@@ -11,16 +11,19 @@ import { GerenciarConcessionarias } from './components/GerenciarConcessionarias'
 import { GerenciarTiposPostes } from './components/GerenciarTiposPostes';
 import { EditorGrupo } from './components/EditorGrupo';
 import { Login } from './components/Login';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
-  const { currentView } = useApp();
   const { session, loading } = useAuth();
 
   // Mostra um indicador de carregamento enquanto verifica a autenticação
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando...</p>
+        </div>
       </div>
     );
   }
@@ -29,6 +32,17 @@ function AppContent() {
   if (!session) {
     return <Login />;
   }
+
+  // Se há sessão, renderiza o app principal com ErrorBoundary interno
+  return (
+    <ErrorBoundary>
+      <AuthenticatedApp />
+    </ErrorBoundary>
+  );
+}
+
+function AuthenticatedApp() {
+  const { currentView } = useApp();
 
   const renderCurrentView = () => {
     switch (currentView) {
@@ -55,18 +69,22 @@ function AppContent() {
 
   return (
     <Layout>
-      {renderCurrentView()}
+      <ErrorBoundary>
+        {renderCurrentView()}
+      </ErrorBoundary>
     </Layout>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

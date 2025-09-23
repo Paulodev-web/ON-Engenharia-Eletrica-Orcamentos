@@ -3,7 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import { CanvasVisual } from './CanvasVisual';
 import { PainelConsolidado } from './PainelConsolidado';
 import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../types';
-import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, Settings, ArrowLeft, Eye } from 'lucide-react';
+import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
 
@@ -103,8 +103,8 @@ export function AreaTrabalho() {
 
   if (!currentOrcamento) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
           <h2 className="text-xl font-semibold text-gray-700">Orçamento não encontrado</h2>
           <p className="text-gray-500 mt-2">Selecione um orçamento no Dashboard</p>
         </div>
@@ -115,8 +115,8 @@ export function AreaTrabalho() {
   // Exibir loading state
   if (loadingBudgetDetails) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
-        <div className="flex flex-col items-center space-y-4">
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center space-y-4 bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           <div className="text-center">
             <h2 className="text-xl font-semibold text-gray-700">Carregando orçamento</h2>
@@ -259,9 +259,9 @@ export function AreaTrabalho() {
   // Renderização condicional baseada no activeView
   if (activeView === 'consolidation') {
     return (
-      <div className="flex flex-col h-screen bg-gray-50">
+      <div className="flex flex-col gap-6">
         {/* Cabeçalho da Consolidação */}
-        <div className="bg-white border-b shadow-sm p-4">
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
@@ -269,38 +269,33 @@ export function AreaTrabalho() {
                 className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
-                <span>Voltar</span>
+                <span>Voltar para Área de Trabalho</span>
               </button>
-              <h1 className="text-xl font-semibold text-gray-900">Materiais Consolidados</h1>
             </div>
-            <button
-              onClick={() => setCurrentView('configuracoes')}
-              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-              title="Configurações"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
           </div>
         </div>
 
         {/* Conteúdo Principal - PainelConsolidado */}
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div>
           <PainelConsolidado
             budgetDetails={budgetDetails}
             orcamentoNome={currentOrcamento.nome}
-                  />
+          />
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   // Visualização Principal ('main')
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col gap-6">
       {/* Cabeçalho da Visualização Principal */}
-      <div className="bg-white border-b shadow-sm p-4">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-900">{currentOrcamento.nome}</h1>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">{currentOrcamento.nome}</h2>
+            <p className="text-sm text-gray-600 mt-1">Cliente: {currentOrcamento.clientName || 'Não definido'} • Cidade: {currentOrcamento.city || 'Não definida'}</p>
+          </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setActiveView('consolidation')}
@@ -309,19 +304,12 @@ export function AreaTrabalho() {
               <Eye className="h-4 w-4" />
               <span>Ver Materiais Consolidados</span>
             </button>
-            <button
-              onClick={() => setCurrentView('configuracoes')}
-              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-              title="Configurações"
-            >
-              <Settings className="h-5 w-5" />
-            </button>
           </div>
         </div>
       </div>
 
-      {/* --- SEÇÃO SUPERIOR: CANVAS --- */}
-      <div className="flex-1 relative overflow-hidden">
+      {/* Canvas - Seção Superior */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden" style={{height: '400px'}}>
         <CanvasVisual
           orcamento={currentOrcamento}
           budgetDetails={budgetDetails}
@@ -347,8 +335,8 @@ export function AreaTrabalho() {
         />
       </div>
 
-      {/* --- SEÇÃO INFERIOR: LISTA DE POSTES --- */}
-      <div className="h-1/3 bg-white border-t shadow-lg p-6 overflow-y-auto">
+      {/* Lista de Postes - Seção Inferior */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
         <PostListAccordion
           budgetDetails={budgetDetails}
           deletingPost={deletingPost}
@@ -570,28 +558,31 @@ function PostListAccordion({
 
 
   return (
-    <div className="bg-gray-50 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
+    <div>
+      <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200">
         <div className="flex items-center space-x-2">
           <Folder className="h-5 w-5 text-blue-600" />
           <h3 className="text-lg font-semibold text-gray-900">Lista de Postes</h3>
         </div>
         <span className="text-sm font-medium text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
-          {postsToDisplay.length} postes (banco)
+          {postsToDisplay.length} {postsToDisplay.length === 1 ? 'poste' : 'postes'}
         </span>
       </div>
 
       {postsToDisplay.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <p>Nenhum poste foi adicionado ainda</p>
-          <p className="text-sm mt-1">Adicione uma imagem de planta e clique com o botão direito nela para criar postes</p>
+        <div className="flex items-center justify-center py-12 text-gray-500">
+          <div className="text-center">
+            <p>Nenhum poste foi adicionado ainda</p>
+            <p className="text-sm mt-1">Adicione uma imagem de planta e clique com o botão direito nela para criar postes</p>
+          </div>
         </div>
       ) : (
-        <Accordion type="single" collapsible className="w-full">
-          {postsToDisplay.map((post: any) => {
-            const postName = post.name;
-            const postType = post.post_types?.name;
-            const postGroups = post.post_item_groups;
+        <div className="px-6 pb-6">
+          <Accordion type="single" collapsible className="w-full">
+            {postsToDisplay.map((post: any) => {
+              const postName = post.name;
+              const postType = post.post_types?.name;
+              const postGroups = post.post_item_groups;
             
             return (
               <AccordionItem key={post.id} value={post.id}>
@@ -856,11 +847,11 @@ function PostListAccordion({
                   </div>
                 </AccordionContent>
               </AccordionItem>
-            );
-          })}
-        </Accordion>
+              );
+            })}
+          </Accordion>
+        </div>
       )}
     </div>
   );
 }
-

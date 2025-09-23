@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, BudgetDetails, PostType } from '../types';
 import { gruposItens as initialGrupos, concessionarias, orcamentos as initialOrcamentos } from '../data/mockData';
 import { supabase } from '../lib/supabaseClient';
@@ -99,6 +99,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loadingBudgetDetails, setLoadingBudgetDetails] = useState<boolean>(false);
   const [loadingPostTypes, setLoadingPostTypes] = useState<boolean>(false);
   const [loadingUpload, setLoadingUpload] = useState<boolean>(false);
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
   
   // Novos estados para gerenciar grupos
   const [utilityCompanies, setUtilityCompanies] = useState<Concessionaria[]>([]);
@@ -106,6 +107,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loadingCompanies, setLoadingCompanies] = useState<boolean>(false);
   const [loadingGroups, setLoadingGroups] = useState<boolean>(false);
   const [currentGroup, setCurrentGroup] = useState<GrupoItem | null>(null);
+
+  // Efeito para inicializar o AppContext apenas após o AuthContext estar estável
+  useEffect(() => {
+    // Pequeno delay para garantir que o AuthContext esteja completamente inicializado
+    const timer = setTimeout(() => {
+      setIsInitialized(true);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const fetchMaterials = async () => {
     try {
@@ -1938,6 +1949,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCurrentOrcamento(prev => prev ? { ...prev, ...updates } : null);
     }
   };
+
+  // Se não estiver inicializado ainda, mostra loading
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-sm text-gray-600">Inicializando aplicação...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AppContext.Provider value={{

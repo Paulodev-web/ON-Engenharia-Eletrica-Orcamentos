@@ -94,8 +94,8 @@ export function GerenciarMateriais() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col h-full space-y-6">
+      <div className="flex justify-between items-center flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Gerenciar Materiais</h2>
           <p className="text-gray-600">Cadastre e gerencie o catálogo completo de materiais</p>
@@ -133,7 +133,7 @@ export function GerenciarMateriais() {
 
       {/* Message feedback */}
       {message && (
-        <div className={`p-4 rounded-lg ${
+        <div className={`p-4 rounded-lg flex-shrink-0 ${
           message.type === 'success' 
             ? 'bg-green-50 text-green-700 border border-green-200' 
             : 'bg-red-50 text-red-700 border border-red-200'
@@ -150,8 +150,8 @@ export function GerenciarMateriais() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-4 border-b">
+      <div className="bg-white rounded-lg shadow flex-1 flex flex-col overflow-hidden">
+        <div className="p-4 border-b flex-shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
             <input
@@ -166,7 +166,7 @@ export function GerenciarMateriais() {
 
         {/* Loading State */}
         {loadingMaterials ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex-1 flex items-center justify-center">
             <div className="flex flex-col items-center space-y-3">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
               <p className="text-gray-500">Carregando materiais...</p>
@@ -174,9 +174,9 @@ export function GerenciarMateriais() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="flex-1 overflow-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Código
@@ -238,18 +238,20 @@ export function GerenciarMateriais() {
 
             {/* Empty State */}
             {filteredMateriais.length === 0 && !loadingMaterials && (
-              <div className="text-center py-12">
-                <p className="text-gray-500">
-                  {searchTerm ? 'Nenhum material encontrado.' : 'Nenhum material cadastrado.'}
-                </p>
-                {!searchTerm && (
-                  <button
-                    onClick={() => setShowModal(true)}
-                    className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Cadastrar primeiro material
-                  </button>
-                )}
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-gray-500">
+                    {searchTerm ? 'Nenhum material encontrado.' : 'Nenhum material cadastrado.'}
+                  </p>
+                  {!searchTerm && (
+                    <button
+                      onClick={() => setShowModal(true)}
+                      className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Cadastrar primeiro material
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </>
