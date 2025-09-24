@@ -3,7 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import { CanvasVisual } from './CanvasVisual';
 import { PainelConsolidado } from './PainelConsolidado';
 import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../types';
-import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye } from 'lucide-react';
+import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, ChevronUp, ChevronDown, EyeOff } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
 
@@ -49,6 +49,9 @@ export function AreaTrabalho() {
   const [searchTerm, setSearchTerm] = useState('');
   const [addingGroup, setAddingGroup] = useState(false);
   const [removingGroup, setRemovingGroup] = useState<string | null>(null);
+  
+  // Estado para controlar se a planta está retraída
+  const [isPlantCollapsed, setIsPlantCollapsed] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clickCoordinates, setClickCoordinates] = useState<{ x: number, y: number } | null>(null);
@@ -309,30 +312,69 @@ export function AreaTrabalho() {
       </div>
 
       {/* Canvas - Seção Superior */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden" style={{height: '400px'}}>
-        <CanvasVisual
-          orcamento={currentOrcamento}
-          budgetDetails={budgetDetails}
-          selectedPoste={selectedPoste}
-          selectedPostDetail={selectedPostDetail}
-          onPosteClick={setSelectedPoste}
-          onPostDetailClick={setSelectedPostDetail}
-          onAddPoste={addPoste}
-          onUpdatePoste={updatePoste}
-          onUploadImage={() => fileInputRef.current?.click()}
-          onDeleteImage={handleDeleteImage}
-          onDeletePoste={handleDeletePoste}
-          onRightClick={handleRightClick}
-          loadingUpload={loadingUpload}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,application/pdf"
-          onChange={handleUploadImage}
-          className="hidden"
-          disabled={loadingUpload}
-        />
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden transition-all duration-300 ease-in-out" 
+           style={{height: isPlantCollapsed ? '60px' : '400px'}}>
+        {/* Cabeçalho da Planta com botão de retrair */}
+        <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
+          <div className="flex items-center space-x-2">
+            <Package className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium text-gray-700">Planta do Orçamento</span>
+          </div>
+          <button
+            onClick={() => setIsPlantCollapsed(!isPlantCollapsed)}
+            className="flex items-center space-x-1 px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+            title={isPlantCollapsed ? 'Expandir planta' : 'Retrair planta'}
+          >
+            {isPlantCollapsed ? (
+              <>
+                <Eye className="h-4 w-4" />
+                <ChevronDown className="h-3 w-3" />
+              </>
+            ) : (
+              <>
+                <EyeOff className="h-4 w-4" />
+                <ChevronUp className="h-3 w-3" />
+              </>
+            )}
+          </button>
+        </div>
+        
+        {/* Conteúdo da Planta - só renderiza se não estiver retraída */}
+        {!isPlantCollapsed && (
+          <div style={{height: 'calc(100% - 60px)'}}>
+            <CanvasVisual
+              orcamento={currentOrcamento}
+              budgetDetails={budgetDetails}
+              selectedPoste={selectedPoste}
+              selectedPostDetail={selectedPostDetail}
+              onPosteClick={setSelectedPoste}
+              onPostDetailClick={setSelectedPostDetail}
+              onAddPoste={addPoste}
+              onUpdatePoste={updatePoste}
+              onUploadImage={() => fileInputRef.current?.click()}
+              onDeleteImage={handleDeleteImage}
+              onDeletePoste={handleDeletePoste}
+              onRightClick={handleRightClick}
+              loadingUpload={loadingUpload}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={handleUploadImage}
+              className="hidden"
+              disabled={loadingUpload}
+            />
+          </div>
+        )}
+        
+        {/* Mensagem quando retraída */}
+        {isPlantCollapsed && (
+          <div className="flex items-center justify-center text-sm text-gray-500 py-2">
+            <EyeOff className="h-4 w-4 mr-2" />
+            <span>Planta retraída - Clique no botão acima para expandir</span>
+          </div>
+        )}
       </div>
 
       {/* Lista de Postes - Seção Inferior */}

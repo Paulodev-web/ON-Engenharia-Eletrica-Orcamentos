@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, Building2, Loader2, Edit, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Calendar, Building2, Loader2, Edit, Trash2, CheckCircle, Clock, BarChart3, TrendingUp } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { CriarOrcamentoModal } from './modals/CriarOrcamentoModal';
 import { AlertDialog } from './ui/alert-dialog';
@@ -13,17 +13,26 @@ export function Dashboard() {
     setCurrentView, 
     setCurrentOrcamento, 
     fetchBudgets,
-    deleteBudget
+    deleteBudget,
+    finalizeBudget
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Orcamento | null>(null);
   const [deletingBudget, setDeletingBudget] = useState<Orcamento | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
 
   // Buscar orçamentos na montagem do componente
   useEffect(() => {
     fetchBudgets();
   }, [fetchBudgets]);
+
+  // Debug: Verificar status dos orçamentos quando a lista muda
+  useEffect(() => {
+    console.log('📊 Status dos orçamentos carregados:', 
+      budgets.map(b => ({ nome: b.nome, status: b.status }))
+    );
+  }, [budgets]);
 
   const handleAbrirOrcamento = (orcamentoId: string) => {
     const orcamento = budgets.find(o => o.id === orcamentoId);
@@ -67,10 +76,42 @@ export function Dashboard() {
     }
   };
 
+  const handleFinalize = async (budget: Orcamento) => {
+    if (window.confirm(`Tem certeza que deseja finalizar o orçamento "${budget.nome}"? Esta ação não pode ser desfeita.`)) {
+      setIsFinalizing(budget.id);
+      try {
+        await finalizeBudget(budget.id);
+        // Opcional: Adicionar uma notificação de sucesso (toast)
+      } catch (error) {
+        // Opcional: Adicionar uma notificação de erro (toast)
+        console.error("Falha na operação de finalização a partir do componente.");
+      } finally {
+        setIsFinalizing(null);
+      }
+    }
+  };
+
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingBudget(null);
   };
+
+  // Calcular estatísticas dos orçamentos
+  const getBudgetStats = () => {
+    const total = budgets.length;
+    const finalizados = budgets.filter(b => b.status === 'Finalizado').length;
+    const emAndamento = budgets.filter(b => b.status === 'Em Andamento').length;
+    const percentualFinalizacao = total > 0 ? Math.round((finalizados / total) * 100) : 0;
+
+    return {
+      total,
+      finalizados,
+      emAndamento,
+      percentualFinalizacao
+    };
+  };
+
+  const stats = getBudgetStats();
 
   return (
     <div className="flex flex-col h-full space-y-6">
@@ -100,7 +141,7 @@ export function Dashboard() {
                   Data de Modificação
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  Status do Projeto
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ações
@@ -152,45 +193,77 @@ export function Dashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        orcamento.status === 'Finalizado' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {orcamento.status}
-                      </span>
+                      {/* Debug log para verificar status */}
+                      {console.log(`🎯 Dashboard - Orçamento ${orcamento.nome}: status = "${orcamento.status}"`)}
+                      
+                      {orcamento.status === 'Finalizado' ? (
+                        <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          <div className="w-2 h-2 bg-green-600 rounded-full mr-1.5"></div>
+                          Finalizado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                          <div className="w-2 h-2 bg-yellow-600 rounded-full mr-1.5"></div>
+                          Em Andamento
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAbrirOrcamento(orcamento.id);
-                          }}
-                          className="text-blue-600 hover:text-blue-900 font-medium"
-                        >
-                          Abrir
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditBudget(orcamento);
-                          }}
-                          className="text-gray-600 hover:text-gray-900 transition-colors"
-                          title="Editar orçamento"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteBudget(orcamento);
-                          }}
-                          className="text-red-600 hover:text-red-900 transition-colors"
-                          title="Excluir orçamento"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {orcamento.status !== 'Finalizado' ? (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAbrirOrcamento(orcamento.id);
+                              }}
+                              className="text-blue-600 hover:text-blue-900 font-medium"
+                            >
+                              Abrir
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditBudget(orcamento);
+                              }}
+                              className="text-gray-600 hover:text-gray-900 transition-colors"
+                              title="Editar orçamento"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleFinalize(orcamento);
+                              }}
+                              disabled={isFinalizing === orcamento.id}
+                              className="text-green-600 hover:text-green-900 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Finalizar orçamento"
+                            >
+                              {isFinalizing === orcamento.id ? 'Finalizando...' : 'Finalizar'}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteBudget(orcamento);
+                              }}
+                              className="text-red-600 hover:text-red-900 transition-colors"
+                              title="Excluir orçamento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAbrirOrcamento(orcamento.id);
+                            }}
+                            className="text-blue-600 hover:text-blue-900 font-medium"
+                          >
+                            Visualizar Detalhes
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

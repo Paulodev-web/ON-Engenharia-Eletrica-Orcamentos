@@ -19,6 +19,7 @@ interface AppContextType {
   loadingBudgetDetails: boolean;
   loadingPostTypes: boolean;
   loadingUpload: boolean;
+  loading: boolean;
   
   // Novos estados para gerenciar grupos
   utilityCompanies: Concessionaria[];
@@ -31,6 +32,9 @@ interface AppContextType {
   setCurrentOrcamento: (orcamento: Orcamento | null) => void;
   setCurrentGroup: (group: GrupoItem | null) => void;
   
+  // Funções de sincronização
+  fetchAllCoreData: () => Promise<void>;
+  
   // Funções de materiais
   fetchMaterials: () => Promise<void>;
   addMaterial: (material: Omit<Material, 'id'>) => Promise<void>;
@@ -42,6 +46,7 @@ interface AppContextType {
   addBudget: (budgetData: { project_name: string; client_name?: string; city?: string; company_id: string; }) => Promise<void>;
   updateBudget: (budgetId: string, budgetData: { project_name?: string; client_name?: string; city?: string; company_id?: string; }) => Promise<void>;
   deleteBudget: (budgetId: string) => Promise<void>;
+  finalizeBudget: (budgetId: string) => Promise<void>;
   fetchBudgetDetails: (budgetId: string) => Promise<void>;
   uploadPlanImage: (budgetId: string, file: File) => Promise<void>;
   deletePlanImage: (budgetId: string) => Promise<void>;
@@ -99,6 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loadingBudgetDetails, setLoadingBudgetDetails] = useState<boolean>(false);
   const [loadingPostTypes, setLoadingPostTypes] = useState<boolean>(false);
   const [loadingUpload, setLoadingUpload] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
   
   // Novos estados para gerenciar grupos
@@ -117,6 +123,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => clearTimeout(timer);
   }, []);
+
 
   const fetchMaterials = async () => {
     try {
@@ -231,6 +238,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
 
       setMateriais(prev => prev.map(m => m.id === id ? updatedMaterial : m));
+      
+      // Sincronizar dados após mutação - CRÍTICO para preços atualizados
+      console.log("💰 Material atualizado, sincronizando preços...");
+      await fetchMaterials();
     } catch (error) {
       console.error('Erro ao atualizar material:', error);
       throw error;
@@ -289,18 +300,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 
       // Mapear os dados do banco para o formato do frontend
-      const orcamentosFormatados: Orcamento[] = data?.map(item => ({
-        id: item.id,
-        nome: item.project_name || '',
-        concessionariaId: item.company_id || '', // Usar company_id do banco
-        company_id: item.company_id, // ID da empresa no Supabase
-        dataModificacao: item.updated_at ? new Date(item.updated_at).toISOString().split('T')[0] : '',
-        status: item.status as 'Em Andamento' | 'Finalizado',
-        postes: [], // Será implementado quando conectarmos os postes
-        ...(item.client_name && { clientName: item.client_name }),
-        ...(item.city && { city: item.city }),
-        ...(item.plan_image_url && { imagemPlanta: item.plan_image_url }),
-      })) || [];
+      const orcamentosFormatados: Orcamento[] = data?.map(item => {
+        // Log para debugar status vindos do banco
+        console.log(`📋 Orçamento ${item.project_name}: status = "${item.status}" (tipo: ${typeof item.status})`);
+        
+        // Normalizar o status para garantir compatibilidade
+        let normalizedStatus: 'Em Andamento' | 'Finalizado' = 'Em Andamento';
+        if (item.status === 'Finalizado' || item.status === 'finalized' || item.status === 'Concluído') {
+          normalizedStatus = 'Finalizado';
+        }
+        
+        return {
+          id: item.id,
+          nome: item.project_name || '',
+          concessionariaId: item.company_id || '', // Usar company_id do banco
+          company_id: item.company_id, // ID da empresa no Supabase
+          dataModificacao: item.updated_at ? new Date(item.updated_at).toISOString().split('T')[0] : '',
+          status: normalizedStatus,
+          postes: [], // Será implementado quando conectarmos os postes
+          ...(item.client_name && { clientName: item.client_name }),
+          ...(item.city && { city: item.city }),
+          ...(item.plan_image_url && { imagemPlanta: item.plan_image_url }),
+        };
+      }) || [];
 
 
 
@@ -361,7 +383,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBudgets(prev => [newBudget, ...prev]);
       
       // Definir como orçamento atual e mudar para a área de trabalho
-
       setCurrentOrcamento(newBudget);
       setCurrentView('orcamento');
     } catch (error) {
@@ -418,7 +439,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (currentOrcamento && currentOrcamento.id === budgetId) {
         setCurrentOrcamento(updatedBudget);
       }
-
     } catch (error) {
       console.error('Erro ao atualizar orçamento:', error);
       throw error;
@@ -450,10 +470,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCurrentOrcamento(null);
         setCurrentView('dashboard');
       }
-
     } catch (error) {
       console.error('Erro ao excluir orçamento:', error);
       throw error;
+    }
+  };
+
+  const finalizeBudget = async (budgetId: string) => {
+    try {
+      setLoading(true); // Usar estado de loading geral
+      
+      console.log(`🔒 Iniciando finalização do orçamento ${budgetId}...`);
+      
+      const { error } = await supabase.rpc('finalize_budget', {
+        p_budget_id: budgetId,
+      });
+
+      if (error) {
+        console.error('Erro ao finalizar orçamento:', error.message);
+        // Adicionar lógica para notificar o usuário (ex: toast)
+        throw new Error(`Falha ao finalizar o orçamento: ${error.message}`);
+      }
+
+      console.log(`✅ RPC finalize_budget executado com sucesso para orçamento ${budgetId}`);
+
+      // MUDANÇA CRÍTICA: Sincronizar TODOS os dados de catálogo
+      console.log("💾 Orçamento finalizado, sincronizando todos os dados...");
+      await Promise.all([
+        fetchBudgets(),
+        fetchMaterials(),
+        fetchPostTypes(),
+        fetchUtilityCompanies(),
+      ]);
+
+      console.log("🎉 Finalização do orçamento concluída com sucesso!");
+      
+    } catch (error) {
+      console.error('❌ Erro na finalização do orçamento:', error);
+      // Lidar com o erro
+      throw error;
+    } finally {
+      setLoading(false); // Desligar o estado de loading geral
     }
   };
 
@@ -892,6 +949,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         unidade: newMaterial.unit || '',
       };
       setMateriais(prev => [...prev, newMaterialFormatted]);
+      
+      // Sincronizar dados após mutação
+      await fetchPostTypes();
     } catch (error) {
       console.error('Erro ao adicionar tipo de poste:', error);
       throw error;
@@ -982,6 +1042,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           )
         );
       }
+      
+      // Sincronizar dados após mutação - CRÍTICO para preços de postes atualizados
+      console.log("🏗️ Tipo de poste atualizado, sincronizando preços...");
+      await Promise.all([fetchPostTypes(), fetchMaterials()]);
     } catch (error) {
       console.error('Erro ao atualizar tipo de poste:', error);
       throw error;
@@ -1020,6 +1084,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (postTypeData.material_id) {
         setMateriais(prev => prev.filter(material => material.id !== postTypeData.material_id));
       }
+      
+      // Sincronizar dados após mutação
+      await fetchPostTypes();
     } catch (error) {
       console.error('Erro ao excluir tipo de poste:', error);
       throw error;
@@ -1950,6 +2017,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Função centralizada para buscar todos os dados essenciais
+  const fetchAllCoreData = useCallback(async () => {
+    console.log("🔄 Sincronizando todos os dados com o banco de dados...");
+    setLoading(true);
+    try {
+      // Buscar dados de catálogo em paralelo
+      await Promise.all([
+        fetchBudgets(),
+        fetchMaterials(),
+        fetchPostTypes(),
+        fetchUtilityCompanies(),
+      ]);
+
+      console.log("✅ Sincronização completa dos dados essenciais concluída");
+    } catch (error) {
+      console.error("❌ Falha ao sincronizar dados essenciais:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchBudgets, fetchMaterials, fetchPostTypes, fetchUtilityCompanies]);
+
   // Se não estiver inicializado ainda, mostra loading
   if (!isInitialized) {
     return (
@@ -1978,6 +2066,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadingBudgetDetails,
       loadingPostTypes,
       loadingUpload,
+      loading,
       
       // Novos estados para gerenciar grupos
       utilityCompanies,
@@ -1990,6 +2079,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCurrentOrcamento,
       setCurrentGroup,
       
+      // Funções de sincronização
+      fetchAllCoreData,
+      
       // Funções de materiais
       fetchMaterials,
       addMaterial,
@@ -2001,6 +2093,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addBudget,
       updateBudget,
       deleteBudget,
+      finalizeBudget,
       fetchBudgetDetails,
       uploadPlanImage,
       deletePlanImage,

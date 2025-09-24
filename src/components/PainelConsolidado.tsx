@@ -25,6 +25,12 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
     }
 
     const materiaisMap = new Map<string, MaterialConsolidado>();
+    
+    // Determinar se o orçamento está finalizado para escolher qual preço usar
+    const isFinalized = budgetDetails.status === 'Finalizado' || budgetDetails.status === 'Concluído';
+    
+    console.log(`💰 Consolidação de materiais - Orçamento ${isFinalized ? 'FINALIZADO' : 'EM ANDAMENTO'}`);
+    console.log(`📋 Status: "${budgetDetails.status}" - Usando preços ${isFinalized ? 'congelados (snapshot)' : 'atuais (catálogo)'}`);
 
     // Percorrer todos os postes
     budgetDetails.posts.forEach(post => {
@@ -42,14 +48,21 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
             existingMaterial.subtotal = existingMaterial.quantidade * existingMaterial.precoUnit;
           } else {
             // Novo material, adicionar ao mapa
+            // LÓGICA CONDICIONAL: 
+            // - Orçamento finalizado: usar price_at_addition (preço congelado do snapshot)
+            // - Orçamento em andamento: usar materialData.price (preço atual do catálogo)
+            const priceToUse = isFinalized ? (material.price_at_addition || 0) : (materialData.price || 0);
+            
+            console.log(`📦 Material: ${materialData.name} - Preço ${isFinalized ? 'congelado' : 'atual'}: R$ ${priceToUse.toFixed(2)}`);
+            
             materiaisMap.set(materialId, {
               materialId,
               codigo: materialData.code || '',
               nome: materialData.name || 'Material sem nome',
               unidade: materialData.unit || '',
-              precoUnit: materialData.price || 0,
+              precoUnit: priceToUse,
               quantidade: material.quantity,
-              subtotal: (materialData.price || 0) * material.quantity,
+              subtotal: priceToUse * material.quantity,
             });
           }
         });
@@ -67,14 +80,19 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
           existingMaterial.subtotal = existingMaterial.quantidade * existingMaterial.precoUnit;
         } else {
           // Novo material, adicionar ao mapa
+          // MATERIAIS AVULSOS: price_at_addition sempre correto (preço no momento da adição)
+          const priceToUse = material.price_at_addition || 0;
+          
+          console.log(`🔧 Material avulso: ${materialData.name} - Preço no momento da adição: R$ ${priceToUse.toFixed(2)}`);
+          
           materiaisMap.set(materialId, {
             materialId,
             codigo: materialData.code || '',
             nome: materialData.name || 'Material sem nome',
             unidade: materialData.unit || '',
-            precoUnit: material.price_at_addition || 0,
+            precoUnit: priceToUse,
             quantidade: material.quantity,
-            subtotal: (material.price_at_addition || 0) * material.quantity,
+            subtotal: priceToUse * material.quantity,
           });
         }
       });

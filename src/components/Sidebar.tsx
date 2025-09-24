@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Home, 
-  Calculator, 
-  Settings, 
+  Calculator,  
   Package, 
   Users, 
   Building, 
@@ -42,13 +41,6 @@ const navigationItems: NavItem[] = [
     icon: Calculator,
     view: 'orcamento',
     description: 'Criar e editar orçamentos'
-  },
-  {
-    id: 'configuracoes',
-    label: 'Configurações',
-    icon: Settings,
-    view: 'configuracoes',
-    description: 'Configurar sistema'
   }
 ];
 
