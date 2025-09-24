@@ -3,6 +3,7 @@ import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, Budge
 import { gruposItens as initialGrupos, concessionarias, orcamentos as initialOrcamentos } from '../data/mockData';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
+import Papa from 'papaparse';
 
 interface AppContextType {
   materiais: Material[];
@@ -40,6 +41,7 @@ interface AppContextType {
   addMaterial: (material: Omit<Material, 'id'>) => Promise<void>;
   updateMaterial: (id: string, material: Omit<Material, 'id'>) => Promise<void>;
   deleteMaterial: (id: string) => Promise<void>;
+  importMaterialsFromCSV: (file: File) => Promise<{ success: boolean; message: string }>;
   
   // Funções de orçamentos
   fetchBudgets: () => Promise<void>;
@@ -270,6 +272,92 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.error('Erro ao excluir material:', error);
       throw error;
     }
+  };
+
+  const importMaterialsFromCSV = async (file: File): Promise<{ success: boolean; message: string }> => {
+    return new Promise((resolve, reject) => {
+      setLoading(true); // Usar um estado de loading global, se disponível
+
+      Papa.parse(file, {
+        header: false,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          try {
+            const parsedData = results.data as Array<string[]>;
+            
+            if (!parsedData || parsedData.length === 0) {
+              resolve({ success: false, message: 'Planilha vazia ou em formato inválido.' });
+              return;
+            }
+
+            // Filtrar dados: começar da linha 3 (índice 2), apenas ímpares, ignorar últimas 2 linhas
+            const totalLines = parsedData.length;
+            const filteredData = parsedData
+              .slice(2, totalLines - 2) // Pular primeiras 2 linhas e últimas 2 linhas
+              .filter((_, index) => index % 2 === 0); // Apenas índices pares (que correspondem a linhas ímpares no CSV original)
+
+            console.log(`📊 Total de linhas no CSV: ${totalLines}`);
+            console.log(`📊 Linhas após filtros: ${filteredData.length}`);
+
+            const materialsToUpsert = filteredData.map(row => {
+              const internalCode = row[0]; // Coluna A
+              const description = row[1]; // Coluna B
+
+              if (!internalCode || !description) {
+                return null;
+              }
+
+              return {
+                code: internalCode.trim(),
+                name: description.trim(),
+                description: description.trim(),
+                price: 0,
+                unit: 'un',
+              };
+            }).filter(Boolean);
+
+            // Remover duplicatas baseado no código
+            const uniqueMaterials = materialsToUpsert.reduce((acc, material) => {
+              if (!material) return acc; // Pular se material for null
+              
+              const existingIndex = acc.findIndex(m => m && m.code === material.code);
+              if (existingIndex >= 0) {
+                // Se já existe, atualiza com a última descrição encontrada
+                acc[existingIndex] = material;
+              } else {
+                acc.push(material);
+              }
+              return acc;
+            }, [] as typeof materialsToUpsert);
+
+            console.log(`📊 Materiais únicos após remoção de duplicatas: ${uniqueMaterials.length}`);
+
+            if (uniqueMaterials.length === 0) {
+              resolve({ success: false, message: 'Nenhum material válido encontrado. Verifique se a planilha possui dados nas colunas A (código) e B (descrição) nas linhas ímpares a partir da linha 3.' });
+              return;
+            }
+
+            const { error } = await supabase
+              .from('materials')
+              .upsert(uniqueMaterials, { onConflict: 'code' });
+
+            if (error) {
+              throw new Error(error.message);
+            }
+
+            await fetchAllCoreData(); // Assumindo que esta função já existe para recarregar todos os dados
+            
+            resolve({ success: true, message: `${uniqueMaterials.length} materiais foram importados/atualizados com sucesso!` });
+
+          } catch (error: any) {
+            console.error('Erro no processo de importação:', error);
+            reject({ success: false, message: `Falha na importação: ${error.message}` });
+          } finally {
+            setLoading(false); // Desativa o loading
+          }
+        }
+      });
+    });
   };
 
   // Funções para orçamentos
@@ -2087,6 +2175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addMaterial,
       updateMaterial,
       deleteMaterial,
+      importMaterialsFromCSV,
       
       // Funções de orçamentos
       fetchBudgets,

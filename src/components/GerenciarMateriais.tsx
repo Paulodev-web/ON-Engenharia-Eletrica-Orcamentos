@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, Upload, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Material } from '../types';
 
 export function GerenciarMateriais() {
-  const { materiais, loadingMaterials, fetchMaterials, addMaterial, updateMaterial, deleteMaterial } = useApp();
+  const { materiais, loadingMaterials, fetchMaterials, addMaterial, updateMaterial, deleteMaterial, importMaterialsFromCSV } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [operationLoading, setOperationLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // Adicione os seguintes estados e a ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // Buscar materiais quando o componente for montado
   useEffect(() => {
@@ -28,6 +32,27 @@ export function GerenciarMateriais() {
 
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
+  };
+
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportMessage(null);
+    try {
+      const result = await importMaterialsFromCSV(file);
+      setImportMessage({ type: result.success ? 'success' : 'error', text: result.message });
+    } catch (error: any) {
+      setImportMessage({ type: 'error', text: error.message || 'Ocorreu um erro desconhecido.' });
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
   };
 
   const filteredMateriais = materiais.filter(material =>
@@ -113,7 +138,17 @@ export function GerenciarMateriais() {
             )}
             <span>Atualizar</span>
           </button>
+          {/* Input de arquivo oculto */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileImport}
+            accept=".csv"
+            className="hidden"
+          />
+          {/* Botão que aciona o input */}
           <button 
+            onClick={triggerFileInput}
             disabled={operationLoading}
             className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -142,6 +177,25 @@ export function GerenciarMateriais() {
             <p>{message.text}</p>
             <button
               onClick={() => setMessage(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Área para feedback de importação */}
+      {importMessage && (
+        <div className={`p-4 rounded-lg flex-shrink-0 ${
+          importMessage.type === 'success' 
+            ? 'bg-green-50 text-green-700 border border-green-200' 
+            : 'bg-red-50 text-red-700 border border-red-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <p>{importMessage.text}</p>
+            <button
+              onClick={() => setImportMessage(null)}
               className="text-gray-400 hover:text-gray-600"
             >
               ✕
