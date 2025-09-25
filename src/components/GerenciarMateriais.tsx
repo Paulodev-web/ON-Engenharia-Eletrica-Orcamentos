@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, Upload, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAlertDialog } from '../hooks/useAlertDialog';
+import { AlertDialog } from './ui/alert-dialog';
 import { Material } from '../types';
 
 export function GerenciarMateriais() {
@@ -14,6 +16,8 @@ export function GerenciarMateriais() {
   // Adicione os seguintes estados e a ref
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  
+  const alertDialog = useAlertDialog();
 
   // Buscar materiais quando o componente for montado
   useEffect(() => {
@@ -66,21 +70,33 @@ export function GerenciarMateriais() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, materialName?: string) => {
     if (operationLoading) return;
     
-    if (confirm('Tem certeza que deseja excluir este material?')) {
-      setOperationLoading(true);
-      try {
-        await deleteMaterial(id);
-        showMessage('success', 'Material excluído com sucesso!');
-      } catch (error) {
-        console.error('Erro ao excluir material:', error);
-        showMessage('error', 'Erro ao excluir material. Tente novamente.');
-      } finally {
-        setOperationLoading(false);
+    const material = materiais.find(m => m.id === id);
+    const name = materialName || material?.descricao || 'este material';
+    
+    alertDialog.showConfirm(
+      'Excluir Material',
+      `Tem certeza que deseja excluir ${name}?`,
+      async () => {
+        setOperationLoading(true);
+        try {
+          await deleteMaterial(id);
+          showMessage('success', 'Material excluído com sucesso!');
+        } catch (error) {
+          console.error('Erro ao excluir material:', error);
+          showMessage('error', 'Erro ao excluir material. Tente novamente.');
+        } finally {
+          setOperationLoading(false);
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
       }
-    }
+    );
   };
 
   const handleCloseModal = () => {
@@ -273,7 +289,7 @@ export function GerenciarMateriais() {
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(material.id)}
+                          onClick={() => handleDelete(material.id, material.descricao)}
                           disabled={operationLoading}
                           className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -320,6 +336,8 @@ export function GerenciarMateriais() {
           loading={operationLoading}
         />
       )}
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }
@@ -338,12 +356,17 @@ function MaterialModal({ material, onClose, onSave, loading = false }: MaterialM
     precoUnit: material?.precoUnit || 0,
     unidade: material?.unidade || '',
   });
+  
+  const alertDialog = useAlertDialog();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.codigo.trim() || !formData.descricao.trim() || !formData.unidade.trim()) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      alertDialog.showError(
+        'Campos Obrigatórios',
+        'Por favor, preencha todos os campos obrigatórios.'
+      );
       return;
     }
 
@@ -438,6 +461,8 @@ function MaterialModal({ material, onClose, onSave, loading = false }: MaterialM
           </div>
         </form>
       </div>
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }

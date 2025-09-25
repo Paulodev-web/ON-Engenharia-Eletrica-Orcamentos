@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Filter, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAlertDialog } from '../hooks/useAlertDialog';
+import { AlertDialog } from './ui/alert-dialog';
 import { GrupoItem } from '../types';
 
 export function GerenciarGrupos() {
@@ -17,6 +19,8 @@ export function GerenciarGrupos() {
   } = useApp();
   const [selectedConcessionaria, setSelectedConcessionaria] = useState<string>('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  const alertDialog = useAlertDialog();
 
   // Carregar concessionárias na montagem do componente
   useEffect(() => {
@@ -44,19 +48,38 @@ export function GerenciarGrupos() {
     setCurrentView('editor-grupo');
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este grupo de itens?')) {
-      try {
-        setDeletingId(id);
-        await deleteGroup(id);
-        // fetchItemGroups será chamado automaticamente dentro de deleteGroup
-      } catch (error) {
-        console.error('Erro ao excluir grupo:', error);
-        alert('Erro ao excluir grupo. Tente novamente.');
-      } finally {
-        setDeletingId(null);
+  const handleDelete = async (id: string, groupName?: string) => {
+    const grupo = itemGroups.find(g => g.id === id);
+    const name = groupName || grupo?.nome || 'este grupo de itens';
+    
+    alertDialog.showConfirm(
+      'Excluir Grupo de Itens',
+      `Tem certeza que deseja excluir ${name}?`,
+      async () => {
+        try {
+          setDeletingId(id);
+          await deleteGroup(id);
+          // fetchItemGroups será chamado automaticamente dentro de deleteGroup
+          alertDialog.showSuccess(
+            'Grupo Excluído',
+            'O grupo de itens foi removido com sucesso.'
+          );
+        } catch (error) {
+          console.error('Erro ao excluir grupo:', error);
+          alertDialog.showError(
+            'Erro ao Excluir',
+            'Erro ao excluir grupo. Tente novamente.'
+          );
+        } finally {
+          setDeletingId(null);
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
       }
-    }
+    );
   };
 
   const handleNovoGrupo = () => {
@@ -166,7 +189,7 @@ export function GerenciarGrupos() {
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(grupo.id)}
+                        onClick={() => handleDelete(grupo.id, grupo.nome)}
                         disabled={deletingId === grupo.id}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -200,6 +223,8 @@ export function GerenciarGrupos() {
           )}
         </div>
       </div>
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }

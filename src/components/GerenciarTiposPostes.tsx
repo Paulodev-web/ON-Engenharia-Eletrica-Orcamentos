@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Loader2, X, TowerControl } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAlertDialog } from '../hooks/useAlertDialog';
+import { AlertDialog } from './ui/alert-dialog';
 import { PostType } from '../types';
 
 export function GerenciarTiposPostes() {
@@ -18,6 +20,8 @@ export function GerenciarTiposPostes() {
   const [operationLoading, setOperationLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  const alertDialog = useAlertDialog();
 
   // Buscar tipos de poste quando o componente for montado
   useEffect(() => {
@@ -47,18 +51,27 @@ export function GerenciarTiposPostes() {
   const handleDelete = async (id: string, name: string) => {
     if (operationLoading) return;
     
-    if (confirm(`Tem certeza que deseja excluir o tipo de poste "${name}"?`)) {
-      setDeletingId(id);
-      try {
-        await deletePostType(id);
-        showMessage('success', 'Tipo de poste excluído com sucesso!');
-      } catch (error) {
-        console.error('Erro ao excluir tipo de poste:', error);
-        showMessage('error', 'Erro ao excluir tipo de poste. Tente novamente.');
-      } finally {
-        setDeletingId(null);
+    alertDialog.showConfirm(
+      'Excluir Tipo de Poste',
+      `Tem certeza que deseja excluir o tipo de poste "${name}"?`,
+      async () => {
+        setDeletingId(id);
+        try {
+          await deletePostType(id);
+          showMessage('success', 'Tipo de poste excluído com sucesso!');
+        } catch (error) {
+          console.error('Erro ao excluir tipo de poste:', error);
+          showMessage('error', 'Erro ao excluir tipo de poste. Tente novamente.');
+        } finally {
+          setDeletingId(null);
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
       }
-    }
+    );
   };
 
   const handleCloseModal = () => {
@@ -260,6 +273,8 @@ export function GerenciarTiposPostes() {
           loading={operationLoading}
         />
       )}
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }

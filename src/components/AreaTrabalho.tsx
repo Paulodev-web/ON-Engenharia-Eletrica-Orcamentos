@@ -6,12 +6,13 @@ import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../type
 import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, ChevronUp, ChevronDown, EyeOff } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
+import { useAlertDialog } from '../hooks/useAlertDialog';
+import { AlertDialog } from './ui/alert-dialog';
 
 export function AreaTrabalho() {
   // --- INÍCIO DO BLOCO DE CÓDIGO PARA SUBSTITUIR ---
   const {
     currentOrcamento,
-    setCurrentView,
     budgetDetails,
     loadingBudgetDetails,
     fetchBudgetDetails,
@@ -39,6 +40,8 @@ export function AreaTrabalho() {
     fetchMaterials
     // Adicione aqui quaisquer outras funções/estados do context que a UI usa
   } = useApp();
+  
+  const alertDialog = useAlertDialog();
   
   // Estado de visualização local
   const [activeView, setActiveView] = useState<'main' | 'consolidation'>('main');
@@ -82,7 +85,10 @@ export function AreaTrabalho() {
   // Função para ser chamada pelo modal para adicionar o poste
   const handleAddPost = useCallback(async (postTypeId: string, postName: string) => {
     if (!clickCoordinates || !currentOrcamento?.id) {
-      alert("Erro: Não foi possível adicionar o poste. Dados do orçamento ou coordenadas não encontrados.");
+      alertDialog.showError(
+        "Erro ao Adicionar Poste",
+        "Não foi possível adicionar o poste. Dados do orçamento ou coordenadas não encontrados."
+      );
       return;
     }
     
@@ -97,11 +103,92 @@ export function AreaTrabalho() {
       
       setIsModalOpen(false);
       setClickCoordinates(null);
+      alertDialog.showSuccess(
+        "Poste Adicionado",
+        "O poste foi adicionado com sucesso ao orçamento."
+      );
     } catch (error) {
       console.error("Falha ao adicionar poste:", error);
-      alert("Ocorreu um erro ao salvar o poste.");
+      alertDialog.showError(
+        "Erro ao Salvar",
+        "Ocorreu um erro ao salvar o poste. Tente novamente."
+      );
     }
-  }, [clickCoordinates, currentOrcamento, addPostToBudget]);
+  }, [clickCoordinates, currentOrcamento, addPostToBudget, alertDialog]);
+
+  // Função para adicionar poste com grupos e materiais
+  const handleAddPostWithItems = useCallback(async (
+    postTypeId: string, 
+    postName: string, 
+    selectedGroups: string[], 
+    selectedMaterials: {materialId: string, quantity: number}[]
+  ) => {
+    if (!clickCoordinates || !currentOrcamento?.id) {
+      alertDialog.showError(
+        "Erro ao Adicionar Poste",
+        "Não foi possível adicionar o poste. Dados do orçamento ou coordenadas não encontrados."
+      );
+      return;
+    }
+    
+    try {
+      // Primeiro adicionar o poste e obter seu ID
+      const newPostId = await addPostToBudget({
+        budget_id: currentOrcamento.id,
+        post_type_id: postTypeId,
+        name: postName,
+        x_coord: clickCoordinates.x,
+        y_coord: clickCoordinates.y,
+      });
+      
+      // Aguardar um pouco para garantir que o estado foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Adicionar grupos selecionados
+      for (const groupId of selectedGroups) {
+        try {
+          await addGroupToPost(groupId, newPostId);
+          // Pequena pausa entre operações
+          await new Promise(resolve => setTimeout(resolve, 50));
+        } catch (error) {
+          console.error(`Erro ao adicionar grupo ${groupId}:`, error);
+          // Continue com outros grupos mesmo se um falhar
+        }
+      }
+      
+      // Adicionar materiais avulsos selecionados
+      for (const selectedMaterial of selectedMaterials) {
+        try {
+          const material = materiais.find(m => m.id === selectedMaterial.materialId);
+          if (material) {
+            await addLooseMaterialToPost(
+              newPostId, 
+              selectedMaterial.materialId, 
+              selectedMaterial.quantity, 
+              material.precoUnit
+            );
+            // Pequena pausa entre operações
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+        } catch (error) {
+          console.error(`Erro ao adicionar material ${selectedMaterial.materialId}:`, error);
+          // Continue com outros materiais mesmo se um falhar
+        }
+      }
+      
+      // Aguardar um pouco antes de fechar o modal para garantir que todas as atualizações foram processadas
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      setIsModalOpen(false);
+      setClickCoordinates(null);
+    } catch (error) {
+      console.error("Falha ao adicionar poste com itens:", error);
+      alertDialog.showError(
+        "Erro ao Salvar",
+        "Ocorreu um erro ao salvar o poste e seus itens. Tente novamente."
+      );
+    }
+  }, [clickCoordinates, currentOrcamento, addPostToBudget, addGroupToPost, addLooseMaterialToPost, materiais, alertDialog]);
   // --- FIM DO BLOCO DE CÓDIGO ---
 
   if (!currentOrcamento) {
@@ -136,8 +223,15 @@ export function AreaTrabalho() {
     if (file && currentOrcamento) {
       try {
         await uploadPlanImage(currentOrcamento.id, file);
+        alertDialog.showSuccess(
+          "Upload Concluído",
+          "A imagem da planta foi enviada com sucesso."
+        );
       } catch (error) {
-        alert('Erro ao fazer upload da imagem. Tente novamente.');
+        alertDialog.showError(
+          "Erro no Upload",
+          "Erro ao fazer upload da imagem. Tente novamente."
+        );
       }
     }
     // Limpar o input para permitir upload do mesmo arquivo novamente
@@ -145,26 +239,55 @@ export function AreaTrabalho() {
   };
 
   const handleDeleteImage = async () => {
-    if (window.confirm('Tem certeza que deseja excluir a planta?')) {
-      try {
-        await deletePlanImage(currentOrcamento.id);
-        setSelectedPoste(null);
-        setSelectedPostDetail(null);
-      } catch (error) {
-        alert('Erro ao deletar a imagem. Tente novamente.');
+    alertDialog.showConfirm(
+      "Excluir Planta",
+      "Tem certeza que deseja excluir a planta? Esta ação não pode ser desfeita.",
+      async () => {
+        try {
+          await deletePlanImage(currentOrcamento.id);
+          setSelectedPoste(null);
+          setSelectedPostDetail(null);
+          alertDialog.showSuccess(
+            "Planta Excluída",
+            "A planta foi removida com sucesso."
+          );
+        } catch (error) {
+          alertDialog.showError(
+            "Erro ao Excluir",
+            "Erro ao deletar a imagem. Tente novamente."
+          );
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
       }
-    }
+    );
   };
 
   // Funções legacy (manter para compatibilidade)
   const handleDeletePoste = (posteId: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este poste?')) {
-      const newPostes = currentOrcamento.postes.filter(p => p.id !== posteId);
-      updateOrcamento(currentOrcamento.id, { postes: newPostes });
-      if (selectedPoste?.id === posteId) {
-        setSelectedPoste(null);
+    alertDialog.showConfirm(
+      "Excluir Poste",
+      "Tem certeza que deseja excluir este poste?",
+      () => {
+        const newPostes = currentOrcamento.postes.filter(p => p.id !== posteId);
+        updateOrcamento(currentOrcamento.id, { postes: newPostes });
+        if (selectedPoste?.id === posteId) {
+          setSelectedPoste(null);
+        }
+        alertDialog.showSuccess(
+          "Poste Excluído",
+          "O poste foi removido com sucesso."
+        );
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
       }
-    }
+    );
   };
 
   const addPoste = (x: number, y: number, tipo: TipoPoste) => {
@@ -194,24 +317,38 @@ export function AreaTrabalho() {
   };
 
   const handleDeletePostFromDatabase = async (postId: string, postName: string) => {
-    if (!window.confirm(`Tem certeza que deseja excluir o poste "${postName}"? Todos os grupos e materiais associados também serão removidos.`)) {
-      return;
-    }
-
-    setDeletingPost(postId);
-    
-    try {
-      await deletePostFromBudget(postId);
-      
-      // Se o poste excluído estava selecionado, limpar seleção
-      if (selectedPostDetail?.id === postId) {
-        setSelectedPostDetail(null);
+    alertDialog.showConfirm(
+      "Excluir Poste",
+      `Tem certeza que deseja excluir o poste "${postName}"? Todos os grupos e materiais associados também serão removidos.`,
+      async () => {
+        setDeletingPost(postId);
+        
+        try {
+          await deletePostFromBudget(postId);
+          
+          // Se o poste excluído estava selecionado, limpar seleção
+          if (selectedPostDetail?.id === postId) {
+            setSelectedPostDetail(null);
+          }
+          alertDialog.showSuccess(
+            "Poste Excluído",
+            `O poste "${postName}" foi removido com sucesso.`
+          );
+        } catch (error) {
+          alertDialog.showError(
+            "Erro ao Excluir",
+            "Erro ao excluir poste. Tente novamente."
+          );
+        } finally {
+          setDeletingPost(null);
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
       }
-    } catch (error) {
-      alert('Erro ao excluir poste. Tente novamente.');
-    } finally {
-      setDeletingPost(null);
-    }
+    );
   };
 
   // Função para adicionar grupo ao poste
@@ -222,7 +359,10 @@ export function AreaTrabalho() {
         await addGroupToPost(grupoId, postId);
         setSearchTerm('');
       } catch (error) {
-        alert('Erro ao adicionar grupo. Tente novamente.');
+        alertDialog.showError(
+          "Erro ao Adicionar Grupo",
+          "Erro ao adicionar grupo. Tente novamente."
+        );
       } finally {
         setAddingGroup(false);
       }
@@ -240,19 +380,33 @@ export function AreaTrabalho() {
   // Função para remover grupo do poste
   const handleRemoveGrupo = async (grupoId: string, isSupabaseGroup: boolean = false) => {
     if (isSupabaseGroup) {
-      if (!window.confirm('Tem certeza que deseja remover este grupo? Todos os materiais associados também serão removidos.')) {
-        return;
-      }
-
-      setRemovingGroup(grupoId);
-      
-      try {
-        await removeGroupFromPost(grupoId);
-      } catch (error) {
-        alert('Erro ao remover grupo. Tente novamente.');
-      } finally {
-        setRemovingGroup(null);
-      }
+      alertDialog.showConfirm(
+        "Remover Grupo",
+        "Tem certeza que deseja remover este grupo? Todos os materiais associados também serão removidos.",
+        async () => {
+          setRemovingGroup(grupoId);
+          
+          try {
+            await removeGroupFromPost(grupoId);
+            alertDialog.showSuccess(
+              "Grupo Removido",
+              "O grupo foi removido com sucesso."
+            );
+          } catch (error) {
+            alertDialog.showError(
+              "Erro ao Remover",
+              "Erro ao remover grupo. Tente novamente."
+            );
+          } finally {
+            setRemovingGroup(null);
+          }
+        },
+        {
+          type: 'destructive',
+          confirmText: 'Remover',
+          cancelText: 'Cancelar'
+        }
+      );
     } else if (selectedPoste) {
       const novosGrupos = selectedPoste.gruposItens.filter(id => id !== grupoId);
       updatePoste(selectedPoste.id, { gruposItens: novosGrupos });
@@ -404,7 +558,11 @@ export function AreaTrabalho() {
         onClose={() => setIsModalOpen(false)}
         coordinates={clickCoordinates}
         onSubmit={handleAddPost}
+        onSubmitWithItems={handleAddPostWithItems}
       />
+
+      {/* Alert Dialog */}
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }
@@ -450,6 +608,7 @@ function QuantityEditor({ postGroupId, materialId, currentQuantity, unit, onUpda
         } catch (error) {
           console.error('Erro ao salvar quantidade:', error);
           setLocalQuantity(currentQuantity); // Reverter para valor original
+          // Note: Para QuantityEditor, manteremos o alert simples por ser um componente inline
           alert('Erro ao salvar quantidade. Tente novamente.');
         } finally {
           setIsSaving(false);
@@ -541,7 +700,18 @@ function PostListAccordion({
   updateLooseMaterialQuantity,
   removeLooseMaterialFromPost
 }: PostListAccordionProps) {
+  const [isRendering, setIsRendering] = useState(false);
   const postsToDisplay = budgetDetails?.posts || [];
+
+  // Debounce para evitar renderizações conflitantes
+  useEffect(() => {
+    setIsRendering(true);
+    const timer = setTimeout(() => {
+      setIsRendering(false);
+    }, 50);
+    
+    return () => clearTimeout(timer);
+  }, [budgetDetails?.posts?.length]);
   
   // Estados locais para materiais avulsos
   const [materialSearchTerm, setMaterialSearchTerm] = useState('');
@@ -575,13 +745,16 @@ function PostListAccordion({
       await addLooseMaterialToPost(postId, materialId, 1, material.precoUnit);
       setMaterialSearchTerm('');
     } catch (error) {
+      // Para funções dentro de sub-componentes, podemos manter alerts simples ou
+      // passar um callback de erro para o componente pai
       alert('Erro ao adicionar material avulso. Tente novamente.');
     } finally {
       setAddingLooseMaterial(false);
     }
   };
   
-  // Função para remover material avulso
+  // Função para remover material avulso - como esta função está dentro do sub-componente,
+  // vamos manter o alert simples por ora
   const handleRemoveLooseMaterial = async (postMaterialId: string) => {
     if (!window.confirm('Tem certeza que deseja remover este material avulso?')) {
       return;
@@ -611,7 +784,14 @@ function PostListAccordion({
         </span>
       </div>
 
-      {postsToDisplay.length === 0 ? (
+      {isRendering ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <span className="text-sm text-gray-600">Atualizando lista...</span>
+          </div>
+        </div>
+      ) : postsToDisplay.length === 0 ? (
         <div className="flex items-center justify-center py-12 text-gray-500">
           <div className="text-center">
             <p>Nenhum poste foi adicionado ainda</p>

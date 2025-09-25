@@ -55,7 +55,7 @@ interface AppContextType {
   
   // Funções de tipos de poste
   fetchPostTypes: () => Promise<void>;
-  addPostToBudget: (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => Promise<void>;
+  addPostToBudget: (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => Promise<string>;
   addGroupToPost: (groupId: string, postId: string) => Promise<void>;
   deletePostFromBudget: (postId: string) => Promise<void>;
   removeGroupFromPost: (postGroupId: string) => Promise<void>;
@@ -1359,6 +1359,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         
         return updatedDetails;
       });
+
+      // Retornar o ID do poste criado
+      return data.id;
     } catch (error) {
       console.error('Erro ao adicionar poste:', error);
       throw error;

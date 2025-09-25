@@ -3,6 +3,7 @@ import { Plus, Calendar, Building2, Loader2, Edit, Trash2, CheckCircle, Clock, B
 import { useApp } from '../contexts/AppContext';
 import { CriarOrcamentoModal } from './modals/CriarOrcamentoModal';
 import { AlertDialog } from './ui/alert-dialog';
+import { useAlertDialog } from '../hooks/useAlertDialog';
 import { Orcamento } from '../types';
 
 export function Dashboard() {
@@ -18,9 +19,8 @@ export function Dashboard() {
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Orcamento | null>(null);
-  const [deletingBudget, setDeletingBudget] = useState<Orcamento | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
+  const alertDialog = useAlertDialog();
 
   // Buscar orçamentos na montagem do componente
   useEffect(() => {
@@ -59,36 +59,58 @@ export function Dashboard() {
   };
 
   const handleDeleteBudget = (budget: Orcamento) => {
-    setDeletingBudget(budget);
-  };
-
-  const confirmDelete = async () => {
-    if (!deletingBudget) return;
-
-    setIsDeleting(true);
-    try {
-      await deleteBudget(deletingBudget.id);
-      setDeletingBudget(null);
-    } catch (error) {
-      alert('Erro ao excluir orçamento. Tente novamente.');
-    } finally {
-      setIsDeleting(false);
-    }
+    alertDialog.showConfirm(
+      'Excluir Orçamento',
+      `Tem certeza que deseja excluir o orçamento "${budget.nome}"? Esta ação não pode ser desfeita.`,
+      async () => {
+        try {
+          await deleteBudget(budget.id);
+          alertDialog.showSuccess(
+            'Orçamento Excluído',
+            'O orçamento foi excluído com sucesso.'
+          );
+        } catch (error) {
+          alertDialog.showError(
+            'Erro ao Excluir',
+            'Não foi possível excluir o orçamento. Tente novamente.'
+          );
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
+      }
+    );
   };
 
   const handleFinalize = async (budget: Orcamento) => {
-    if (window.confirm(`Tem certeza que deseja finalizar o orçamento "${budget.nome}"? Esta ação não pode ser desfeita.`)) {
-      setIsFinalizing(budget.id);
-      try {
-        await finalizeBudget(budget.id);
-        // Opcional: Adicionar uma notificação de sucesso (toast)
-      } catch (error) {
-        // Opcional: Adicionar uma notificação de erro (toast)
-        console.error("Falha na operação de finalização a partir do componente.");
-      } finally {
-        setIsFinalizing(null);
+    alertDialog.showConfirm(
+      'Finalizar Orçamento',
+      `Tem certeza que deseja finalizar o orçamento "${budget.nome}"? Esta ação não pode ser desfeita.`,
+      async () => {
+        setIsFinalizing(budget.id);
+        try {
+          await finalizeBudget(budget.id);
+          alertDialog.showSuccess(
+            'Orçamento Finalizado',
+            `O orçamento "${budget.nome}" foi finalizado com sucesso.`
+          );
+        } catch (error) {
+          console.error("Falha na operação de finalização a partir do componente.", error);
+          alertDialog.showError(
+            'Erro ao Finalizar',
+            'Não foi possível finalizar o orçamento. Tente novamente.'
+          );
+        } finally {
+          setIsFinalizing(null);
+        }
+      },
+      {
+        confirmText: 'Finalizar',
+        cancelText: 'Cancelar'
       }
-    }
+    );
   };
 
   const handleCloseModal = () => {
@@ -254,15 +276,27 @@ export function Dashboard() {
                             </button>
                           </>
                         ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAbrirOrcamento(orcamento.id);
-                            }}
-                            className="text-blue-600 hover:text-blue-900 font-medium"
-                          >
-                            Visualizar Detalhes
-                          </button>
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAbrirOrcamento(orcamento.id);
+                              }}
+                              className="text-blue-600 hover:text-blue-900 font-medium"
+                            >
+                              Visualizar Detalhes
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteBudget(orcamento);
+                              }}
+                              className="text-red-600 hover:text-red-900 transition-colors"
+                              title="Excluir orçamento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -296,17 +330,7 @@ export function Dashboard() {
         />
       )}
 
-      <AlertDialog
-        isOpen={!!deletingBudget}
-        onClose={() => setDeletingBudget(null)}
-        title="Confirmar Exclusão"
-        description={`Tem certeza que deseja excluir o orçamento "${deletingBudget?.nome}"? Esta ação não pode ser desfeita.`}
-        confirmText="Excluir"
-        cancelText="Cancelar"
-        onConfirm={confirmDelete}
-        confirmVariant="destructive"
-        loading={isDeleting}
-      />
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }

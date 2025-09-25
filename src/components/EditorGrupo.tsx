@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Minus, Save, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAlertDialog } from '../hooks/useAlertDialog';
+import { AlertDialog } from './ui/alert-dialog';
 import { Material } from '../types';
 
 interface MaterialGrupo {
@@ -25,6 +27,8 @@ export function EditorGrupo() {
   const [concessionariaId, setConcessionariaId] = useState('');
   const [materiaisGrupo, setMateriaisGrupo] = useState<MaterialGrupo[]>([]);
   const [saving, setSaving] = useState(false);
+  
+  const alertDialog = useAlertDialog();
   
   // Inicializar campos quando o componente monta ou grupo muda
   useEffect(() => {
@@ -81,17 +85,26 @@ export function EditorGrupo() {
 
   const handleSave = async () => {
     if (!nomeGrupo.trim()) {
-      alert('Por favor, digite um nome para o grupo.');
+      alertDialog.showError(
+        'Campo Obrigatório',
+        'Por favor, digite um nome para o grupo.'
+      );
       return;
     }
 
     if (materiaisGrupo.length === 0) {
-      alert('Por favor, adicione pelo menos um material ao grupo.');
+      alertDialog.showError(
+        'Materiais Necessários',
+        'Por favor, adicione pelo menos um material ao grupo.'
+      );
       return;
     }
 
     if (!concessionariaId) {
-      alert('Por favor, selecione uma concessionária.');
+      alertDialog.showError(
+        'Campo Obrigatório',
+        'Por favor, selecione uma concessionária.'
+      );
       return;
     }
 
@@ -119,9 +132,16 @@ export function EditorGrupo() {
       // Limpar estado do grupo atual e voltar à tela de grupos
       setCurrentGroup(null);
       setCurrentView('grupos');
+      alertDialog.showSuccess(
+        currentGroup ? 'Grupo Atualizado' : 'Grupo Criado',
+        currentGroup ? 'O grupo foi atualizado com sucesso.' : 'O grupo foi criado com sucesso.'
+      );
     } catch (error) {
       console.error('Erro ao salvar grupo:', error);
-      alert('Erro ao salvar grupo. Tente novamente.');
+      alertDialog.showError(
+        'Erro ao Salvar',
+        'Erro ao salvar grupo. Tente novamente.'
+      );
     } finally {
       setSaving(false);
     }
@@ -324,6 +344,8 @@ export function EditorGrupo() {
           </button>
         </div>
       </div>
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }

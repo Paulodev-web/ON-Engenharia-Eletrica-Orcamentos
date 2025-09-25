@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Loader2, X, Building2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAlertDialog } from '../hooks/useAlertDialog';
+import { AlertDialog } from './ui/alert-dialog';
 import { Concessionaria } from '../types';
 
 export function GerenciarConcessionarias() {
@@ -18,6 +20,8 @@ export function GerenciarConcessionarias() {
   const [operationLoading, setOperationLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  const alertDialog = useAlertDialog();
 
   // Buscar concessionárias quando o componente for montado
   useEffect(() => {
@@ -47,18 +51,27 @@ export function GerenciarConcessionarias() {
   const handleDelete = async (id: string, name: string) => {
     if (operationLoading) return;
     
-    if (confirm(`Tem certeza que deseja excluir a concessionária "${name}"?`)) {
-      setDeletingId(id);
-      try {
-        await deleteUtilityCompany(id);
-        showMessage('success', 'Concessionária excluída com sucesso!');
-      } catch (error) {
-        console.error('Erro ao excluir concessionária:', error);
-        showMessage('error', 'Erro ao excluir concessionária. Tente novamente.');
-      } finally {
-        setDeletingId(null);
+    alertDialog.showConfirm(
+      'Excluir Concessionária',
+      `Tem certeza que deseja excluir a concessionária "${name}"?`,
+      async () => {
+        setDeletingId(id);
+        try {
+          await deleteUtilityCompany(id);
+          showMessage('success', 'Concessionária excluída com sucesso!');
+        } catch (error) {
+          console.error('Erro ao excluir concessionária:', error);
+          showMessage('error', 'Erro ao excluir concessionária. Tente novamente.');
+        } finally {
+          setDeletingId(null);
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir',
+        cancelText: 'Cancelar'
       }
-    }
+    );
   };
 
   const handleCloseModal = () => {
@@ -237,6 +250,8 @@ export function GerenciarConcessionarias() {
           loading={operationLoading}
         />
       )}
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }
@@ -250,12 +265,16 @@ interface CompanyModalProps {
 
 function CompanyModal({ company, onClose, onSave, loading = false }: CompanyModalProps) {
   const [name, setName] = useState(company?.nome || '');
+  const alertDialog = useAlertDialog();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!name.trim()) {
-      alert('Por favor, preencha o nome da concessionária.');
+      alertDialog.showError(
+        'Campo Obrigatório',
+        'Por favor, preencha o nome da concessionária.'
+      );
       return;
     }
 
@@ -315,6 +334,8 @@ function CompanyModal({ company, onClose, onSave, loading = false }: CompanyModa
           </div>
         </form>
       </div>
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }

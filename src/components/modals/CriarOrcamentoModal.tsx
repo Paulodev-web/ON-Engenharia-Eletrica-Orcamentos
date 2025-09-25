@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
+import { useAlertDialog } from '../../hooks/useAlertDialog';
+import { AlertDialog } from '../ui/alert-dialog';
 import { Orcamento } from '../../types';
 
 interface CriarOrcamentoModalProps {
@@ -16,6 +18,8 @@ export function CriarOrcamentoModal({ isOpen, onClose, editingBudget }: CriarOrc
   const [city, setCity] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const alertDialog = useAlertDialog();
 
   const isEditing = !!editingBudget;
 
@@ -46,12 +50,18 @@ export function CriarOrcamentoModal({ isOpen, onClose, editingBudget }: CriarOrc
     e.preventDefault();
     
     if (!nome.trim()) {
-      alert('Por favor, preencha o nome do projeto.');
+      alertDialog.showError(
+        'Campo Obrigatório',
+        'Por favor, preencha o nome do projeto.'
+      );
       return;
     }
 
     if (!selectedCompanyId) {
-      alert('Por favor, selecione uma concessionária.');
+      alertDialog.showError(
+        'Campo Obrigatório',
+        'Por favor, selecione uma concessionária.'
+      );
       return;
     }
 
@@ -66,6 +76,10 @@ export function CriarOrcamentoModal({ isOpen, onClose, editingBudget }: CriarOrc
           city: city.trim() || undefined,
           company_id: selectedCompanyId,
         });
+        alertDialog.showSuccess(
+          'Orçamento Atualizado',
+          'O orçamento foi atualizado com sucesso.'
+        );
       } else {
         // Criar novo orçamento
         await addBudget({
@@ -74,13 +88,20 @@ export function CriarOrcamentoModal({ isOpen, onClose, editingBudget }: CriarOrc
           city: city.trim() || undefined,
           company_id: selectedCompanyId,
         });
+        alertDialog.showSuccess(
+          'Orçamento Criado',
+          'O orçamento foi criado com sucesso e está pronto para uso.'
+        );
       }
       
       // Fechar o modal
       onClose();
     } catch (error) {
       console.error(`Erro ao ${isEditing ? 'atualizar' : 'criar'} orçamento:`, error);
-      alert(`Erro ao ${isEditing ? 'atualizar' : 'criar'} orçamento. Tente novamente.`);
+      alertDialog.showError(
+        `Erro ao ${isEditing ? 'Atualizar' : 'Criar'}`,
+        `Não foi possível ${isEditing ? 'atualizar' : 'criar'} o orçamento. Tente novamente.`
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -197,6 +218,8 @@ export function CriarOrcamentoModal({ isOpen, onClose, editingBudget }: CriarOrc
           </div>
         </form>
       </div>
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }

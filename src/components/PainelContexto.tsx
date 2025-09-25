@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Copy, Check, Plus, X, Loader2, Save } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAlertDialog } from '../hooks/useAlertDialog';
+import { AlertDialog } from './ui/alert-dialog';
 import { Orcamento, Poste, TipoFixacao, BudgetPostDetail } from '../types';
 
 interface PainelContextoProps {
@@ -15,6 +17,8 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
   const [searchTerm, setSearchTerm] = useState('');
   const [addingGroup, setAddingGroup] = useState(false);
   const [removingGroup, setRemovingGroup] = useState<string | null>(null);
+  
+  const alertDialog = useAlertDialog();
 
   const concessionaria = concessionarias.find(c => c.id === orcamento.concessionariaId);
 
@@ -63,7 +67,10 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
         setSearchTerm('');
       } catch (error) {
         console.error('Erro ao adicionar grupo:', error);
-        alert('Erro ao adicionar grupo. Tente novamente.');
+        alertDialog.showError(
+          'Erro ao Adicionar',
+          'Erro ao adicionar grupo. Tente novamente.'
+        );
       } finally {
         setAddingGroup(false);
       }
@@ -80,20 +87,34 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
   const handleRemoveGrupo = async (grupoId: string, isSupabaseGroup: boolean = false) => {
     // Para grupos do Supabase, usar a função de remoção do banco
     if (isSupabaseGroup && selectedPostDetail) {
-      if (!window.confirm('Tem certeza que deseja remover este grupo? Todos os materiais associados também serão removidos.')) {
-        return;
-      }
-
-      setRemovingGroup(grupoId);
-      
-      try {
-        await removeGroupFromPost(grupoId);
-      } catch (error) {
-        console.error('Erro ao remover grupo:', error);
-        alert('Erro ao remover grupo. Tente novamente.');
-      } finally {
-        setRemovingGroup(null);
-      }
+      alertDialog.showConfirm(
+        'Remover Grupo',
+        'Tem certeza que deseja remover este grupo? Todos os materiais associados também serão removidos.',
+        async () => {
+          setRemovingGroup(grupoId);
+          
+          try {
+            await removeGroupFromPost(grupoId);
+            alertDialog.showSuccess(
+              'Grupo Removido',
+              'O grupo foi removido com sucesso.'
+            );
+          } catch (error) {
+            console.error('Erro ao remover grupo:', error);
+            alertDialog.showError(
+              'Erro ao Remover',
+              'Erro ao remover grupo. Tente novamente.'
+            );
+          } finally {
+            setRemovingGroup(null);
+          }
+        },
+        {
+          type: 'destructive',
+          confirmText: 'Remover',
+          cancelText: 'Cancelar'
+        }
+      );
     } else if (selectedPoste) {
       // Fallback para dados locais
       const novosGrupos = selectedPoste.gruposItens.filter(id => id !== grupoId);
@@ -349,6 +370,8 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
         )}
       </div>
       )}
+      
+      <AlertDialog {...alertDialog.dialogProps} />
     </div>
   );
 }
