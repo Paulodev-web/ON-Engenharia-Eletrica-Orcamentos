@@ -59,9 +59,11 @@ export function GerenciarConcessionarias() {
         try {
           await deleteUtilityCompany(id);
           showMessage('success', 'Concessionária excluída com sucesso!');
-        } catch (error) {
+        } catch (error: any) {
           console.error('Erro ao excluir concessionária:', error);
-          showMessage('error', 'Erro ao excluir concessionária. Tente novamente.');
+          // Usar a mensagem específica do erro se disponível
+          const errorMessage = error?.message || 'Erro ao excluir concessionária. Tente novamente.';
+          showMessage('error', errorMessage);
         } finally {
           setDeletingId(null);
         }

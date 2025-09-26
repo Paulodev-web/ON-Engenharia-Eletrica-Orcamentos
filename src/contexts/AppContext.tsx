@@ -1871,6 +1871,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteUtilityCompany = async (id: string) => {
     try {
+      // Primeiro, verificar se a concessionária está sendo usada em algum orçamento
+      const { data: budgetsUsingCompany, error: checkError } = await supabase
+        .from('budgets')
+        .select('id, project_name')
+        .eq('company_id', id)
+        .limit(5); // Limite para não sobrecarregar se houver muitos
+
+      if (checkError) {
+        console.error('Erro ao verificar uso da concessionária:', checkError);
+        throw new Error('Erro ao verificar se a concessionária está sendo utilizada.');
+      }
+
+      // Se houver orçamentos usando esta concessionária, não permitir exclusão
+      if (budgetsUsingCompany && budgetsUsingCompany.length > 0) {
+        const projectNames = budgetsUsingCompany.map(budget => budget.project_name).join(', ');
+        const message = budgetsUsingCompany.length === 1 
+          ? `Esta concessionária não pode ser excluída pois está sendo utilizada no orçamento: ${projectNames}`
+          : `Esta concessionária não pode ser excluída pois está sendo utilizada em ${budgetsUsingCompany.length} orçamentos: ${projectNames}${budgetsUsingCompany.length > 5 ? ' e outros...' : ''}`;
+        
+        throw new Error(message);
+      }
+
+      // Se não houver orçamentos usando, prosseguir com a exclusão
       const { error } = await supabase
         .from('utility_companies')
         .delete()
@@ -1878,14 +1901,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Erro ao excluir concessionária:', error);
-        throw error;
+        throw new Error('Erro ao excluir concessionária do banco de dados.');
       }
 
       // Remover do estado local
       setUtilityCompanies(prev => prev.filter(company => company.id !== id));
     } catch (error) {
       console.error('Erro ao excluir concessionária:', error);
-      throw error;
+      throw error; // Re-throw para que o componente possa capturar a mensagem específica
     }
   };
 
