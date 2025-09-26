@@ -353,7 +353,7 @@ function MaterialModal({ material, onClose, onSave, loading = false }: MaterialM
   const [formData, setFormData] = useState({
     codigo: material?.codigo || '',
     descricao: material?.descricao || '',
-    precoUnit: material?.precoUnit || 0,
+    precoUnit: material?.precoUnit?.toString() || '',
     unidade: material?.unidade || '',
   });
   
@@ -361,6 +361,8 @@ function MaterialModal({ material, onClose, onSave, loading = false }: MaterialM
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const precoUnit = parseFloat(formData.precoUnit) || 0;
     
     if (!formData.codigo.trim() || !formData.descricao.trim() || !formData.unidade.trim()) {
       alertDialog.showError(
@@ -370,7 +372,18 @@ function MaterialModal({ material, onClose, onSave, loading = false }: MaterialM
       return;
     }
 
-    await onSave(formData);
+    if (precoUnit <= 0) {
+      alertDialog.showError(
+        'Preço Inválido',
+        'Por favor, informe um preço válido maior que zero.'
+      );
+      return;
+    }
+
+    await onSave({
+      ...formData,
+      precoUnit
+    });
   };
 
   return (
@@ -414,9 +427,11 @@ function MaterialModal({ material, onClose, onSave, loading = false }: MaterialM
             <input
               type="number"
               step="0.01"
+              min="0"
               value={formData.precoUnit}
-              onChange={(e) => setFormData({ ...formData, precoUnit: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => setFormData({ ...formData, precoUnit: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="0.00"
               required
             />
           </div>

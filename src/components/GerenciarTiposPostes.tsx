@@ -292,20 +292,23 @@ function PostTypeModal({ postType, onClose, onSave, loading = false }: PostTypeM
     code: postType?.code || '',
     description: postType?.description || '',
     shape: postType?.shape || '',
-    height_m: postType?.height_m || 0,
-    price: postType?.price || 0,
+    height_m: postType?.height_m?.toString() || '',
+    price: postType?.price?.toString() || '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const price = parseFloat(formData.price) || 0;
+    const height_m = parseFloat(formData.height_m) || 0;
     
     if (!formData.name.trim()) {
       alert('Por favor, preencha o nome do tipo de poste.');
       return;
     }
 
-    if (formData.price <= 0) {
-      alert('Por favor, informe um preço válido.');
+    if (price <= 0) {
+      alert('Por favor, informe um preço válido maior que zero.');
       return;
     }
 
@@ -314,8 +317,8 @@ function PostTypeModal({ postType, onClose, onSave, loading = false }: PostTypeM
       ...(formData.code.trim() && { code: formData.code.trim() }),
       ...(formData.description.trim() && { description: formData.description.trim() }),
       ...(formData.shape.trim() && { shape: formData.shape.trim() }),
-      ...(formData.height_m > 0 && { height_m: formData.height_m }),
-      price: formData.price,
+      ...(height_m > 0 && { height_m }),
+      price,
     };
 
     await onSave(submitData);
@@ -409,7 +412,7 @@ function PostTypeModal({ postType, onClose, onSave, loading = false }: PostTypeM
               min="0"
               id="height_m"
               value={formData.height_m}
-              onChange={(e) => setFormData({ ...formData, height_m: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => setFormData({ ...formData, height_m: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ex: 11.0"
               disabled={loading}
@@ -426,7 +429,7 @@ function PostTypeModal({ postType, onClose, onSave, loading = false }: PostTypeM
               min="0"
               id="price"
               value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ex: 1250.00"
               required
