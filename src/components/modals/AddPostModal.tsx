@@ -641,7 +641,7 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
 }
 
 export function AddPostModal(props: AddPostModalProps) {
-  return (
+  return (  
     <ModalErrorBoundary onError={props.onClose}>
       <AddPostModalContent {...props} />
     </ModalErrorBoundary>

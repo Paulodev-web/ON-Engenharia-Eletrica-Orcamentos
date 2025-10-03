@@ -3,7 +3,7 @@ import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, Budge
 import { gruposItens as initialGrupos, concessionarias, orcamentos as initialOrcamentos } from '../data/mockData';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
-import Papa from 'papaparse';
+import { processMaterialCSV } from '../services/materialImportService';
 
 interface AppContextType {
   materiais: Material[];
@@ -41,6 +41,7 @@ interface AppContextType {
   addMaterial: (material: Omit<Material, 'id'>) => Promise<void>;
   updateMaterial: (id: string, material: Omit<Material, 'id'>) => Promise<void>;
   deleteMaterial: (id: string) => Promise<void>;
+  deleteAllMaterials: () => Promise<void>;
   importMaterialsFromCSV: (file: File) => Promise<{ success: boolean; message: string }>;
   
   // Funções de orçamentos
@@ -274,90 +275,88 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteAllMaterials = async () => {
+    try {
+      // Chama a função RPC do Supabase que deleta todos os materiais
+      const { error } = await supabase.rpc('delete_all_materials');
+
+      if (error) {
+        console.error('Erro ao excluir todos os materiais:', error);
+        throw error;
+      }
+
+      // Limpar o estado local
+      setMateriais([]);
+      
+      // Recarregar para garantir
+      await fetchMaterials();
+    } catch (error) {
+      console.error('Erro ao excluir todos os materiais:', error);
+      throw error;
+    }
+  };
+
   const importMaterialsFromCSV = async (file: File): Promise<{ success: boolean; message: string }> => {
-    return new Promise((resolve, reject) => {
-      setLoading(true); // Usar um estado de loading global, se disponível
+    setLoading(true);
+    
+    try {
+      // Chamar o serviço de processamento do CSV
+      const result = await processMaterialCSV(file);
+      
+      // Verificar se o processamento foi bem-sucedido
+      if (!result.success || !result.data) {
+        return { success: false, message: result.message };
+      }
 
-      Papa.parse(file, {
-        header: false,
-        skipEmptyLines: true,
-        complete: async (results) => {
-          try {
-            const parsedData = results.data as Array<string[]>;
-            
-            if (!parsedData || parsedData.length === 0) {
-              resolve({ success: false, message: 'Planilha vazia ou em formato inválido.' });
-              return;
-            }
+      const processedMaterials = result.data;
+      const totalProcessed = processedMaterials.length;
 
-            // Filtrar dados: começar da linha 3 (índice 2), apenas ímpares, ignorar últimas 2 linhas
-            const totalLines = parsedData.length;
-            const filteredData = parsedData
-              .slice(2, totalLines - 2) // Pular primeiras 2 linhas e últimas 2 linhas
-              .filter((_, index) => index % 2 === 0); // Apenas índices pares (que correspondem a linhas ímpares no CSV original)
+      console.log(`📊 Total de materiais processados da planilha: ${totalProcessed}`);
 
-            console.log(`📊 Total de linhas no CSV: ${totalLines}`);
-            console.log(`📊 Linhas após filtros: ${filteredData.length}`);
+      // Chamar a função do banco que ignora duplicatas automaticamente
+      const { data: importStats, error: importError } = await supabase
+        .rpc('import_materials_ignore_duplicates', { 
+          materials_data: processedMaterials 
+        });
 
-            const materialsToUpsert = filteredData.map(row => {
-              const internalCode = row[0]; // Coluna A
-              const description = row[1]; // Coluna B
+      if (importError) {
+        console.error('❌ Erro ao importar materiais:', importError);
+        throw new Error(importError.message);
+      }
 
-              if (!internalCode || !description) {
-                return null;
-              }
+      const inserted = importStats?.inserted || 0;
+      const skipped = importStats?.skipped || 0;
 
-              return {
-                code: internalCode.trim(),
-                name: description.trim(),
-                description: description.trim(),
-                price: 0,
-                unit: 'un',
-              };
-            }).filter(Boolean);
+      console.log(`✨ Materiais novos inseridos: ${inserted}`);
+      console.log(`⏭️ Materiais ignorados (já existiam): ${skipped}`);
 
-            // Remover duplicatas baseado no código
-            const uniqueMaterials = materialsToUpsert.reduce((acc, material) => {
-              if (!material) return acc; // Pular se material for null
-              
-              const existingIndex = acc.findIndex(m => m && m.code === material.code);
-              if (existingIndex >= 0) {
-                // Se já existe, atualiza com a última descrição encontrada
-                acc[existingIndex] = material;
-              } else {
-                acc.push(material);
-              }
-              return acc;
-            }, [] as typeof materialsToUpsert);
+      // Recarregar os dados após importação
+      await fetchAllCoreData();
+      
+      // Montar mensagem de retorno
+      let message = '';
+      if (inserted === 0 && skipped > 0) {
+        message = `Todos os ${totalProcessed} materiais da planilha já existiam no banco de dados. Nenhum material novo foi inserido.`;
+      } else if (inserted > 0 && skipped > 0) {
+        message = `✅ ${inserted} materiais novos foram importados com sucesso! (${skipped} já existiam e foram ignorados)`;
+      } else {
+        message = `✅ ${inserted} materiais foram importados com sucesso!`;
+      }
 
-            console.log(`📊 Materiais únicos após remoção de duplicatas: ${uniqueMaterials.length}`);
+      return { 
+        success: true, 
+        message 
+      };
 
-            if (uniqueMaterials.length === 0) {
-              resolve({ success: false, message: 'Nenhum material válido encontrado. Verifique se a planilha possui dados nas colunas A (código) e B (descrição) nas linhas ímpares a partir da linha 3.' });
-              return;
-            }
-
-            const { error } = await supabase
-              .from('materials')
-              .upsert(uniqueMaterials, { onConflict: 'code' });
-
-            if (error) {
-              throw new Error(error.message);
-            }
-
-            await fetchAllCoreData(); // Assumindo que esta função já existe para recarregar todos os dados
-            
-            resolve({ success: true, message: `${uniqueMaterials.length} materiais foram importados/atualizados com sucesso!` });
-
-          } catch (error: any) {
-            console.error('Erro no processo de importação:', error);
-            reject({ success: false, message: `Falha na importação: ${error.message}` });
-          } finally {
-            setLoading(false); // Desativa o loading
-          }
-        }
-      });
-    });
+    } catch (error: any) {
+      console.error('❌ Erro no processo de importação:', error);
+      return { 
+        success: false, 
+        message: `Falha na importação: ${error.message}` 
+      };
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Funções para orçamentos
@@ -2201,6 +2200,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addMaterial,
       updateMaterial,
       deleteMaterial,
+      deleteAllMaterials,
       importMaterialsFromCSV,
       
       // Funções de orçamentos

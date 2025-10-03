@@ -6,7 +6,7 @@ import { AlertDialog } from './ui/alert-dialog';
 import { Material } from '../types';
 
 export function GerenciarMateriais() {
-  const { materiais, loadingMaterials, fetchMaterials, addMaterial, updateMaterial, deleteMaterial, importMaterialsFromCSV } = useApp();
+  const { materiais, loadingMaterials, fetchMaterials, addMaterial, updateMaterial, deleteMaterial, deleteAllMaterials, importMaterialsFromCSV } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
@@ -99,6 +99,32 @@ export function GerenciarMateriais() {
     );
   };
 
+  const handleDeleteAll = async () => {
+    if (operationLoading) return;
+    
+    alertDialog.showConfirm(
+      'ATENÇÃO: Excluir TODOS os Materiais',
+      `Esta ação irá EXCLUIR PERMANENTEMENTE todos os ${materiais.length} materiais cadastrados. Esta ação NÃO PODE SER DESFEITA. Tem certeza absoluta que deseja continuar?`,
+      async () => {
+        setOperationLoading(true);
+        try {
+          await deleteAllMaterials();
+          showMessage('success', 'Todos os materiais foram excluídos com sucesso!');
+        } catch (error) {
+          console.error('Erro ao excluir todos os materiais:', error);
+          showMessage('error', 'Erro ao excluir materiais. Tente novamente.');
+        } finally {
+          setOperationLoading(false);
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'SIM, EXCLUIR TUDO',
+        cancelText: 'Cancelar'
+      }
+    );
+  };
+
   const handleCloseModal = () => {
     if (operationLoading) return;
     setShowModal(false);
@@ -178,6 +204,14 @@ export function GerenciarMateriais() {
           >
             <Plus className="h-5 w-5" />
             <span>Novo Material</span>
+          </button>
+          <button 
+            onClick={handleDeleteAll}
+            disabled={operationLoading || materiais.length === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="h-5 w-5" />
+            <span>Excluir Todos</span>
           </button>
         </div>
       </div>
