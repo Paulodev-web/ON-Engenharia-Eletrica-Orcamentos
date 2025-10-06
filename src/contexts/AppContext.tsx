@@ -49,6 +49,7 @@ interface AppContextType {
   addBudget: (budgetData: { project_name: string; client_name?: string; city?: string; company_id: string; }) => Promise<void>;
   updateBudget: (budgetId: string, budgetData: { project_name?: string; client_name?: string; city?: string; company_id?: string; }) => Promise<void>;
   deleteBudget: (budgetId: string) => Promise<void>;
+  duplicateBudget: (budgetId: string) => Promise<void>;
   finalizeBudget: (budgetId: string) => Promise<void>;
   fetchBudgetDetails: (budgetId: string) => Promise<void>;
   uploadPlanImage: (budgetId: string, file: File) => Promise<void>;
@@ -563,6 +564,201 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Erro ao excluir orçamento:', error);
       throw error;
+    }
+  };
+
+  const duplicateBudget = async (budgetId: string) => {
+    if (!user) {
+      console.log('❌ Usuário não autenticado');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log(`🔄 Iniciando duplicação do orçamento ${budgetId}...`);
+
+      // 1. Buscar dados completos do orçamento original
+      const { data: originalBudget, error: budgetError } = await supabase
+        .from('budgets')
+        .select('*')
+        .eq('id', budgetId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (budgetError) {
+        console.error('Erro ao buscar orçamento original:', budgetError);
+        throw budgetError;
+      }
+
+      console.log(`📋 Orçamento original encontrado: ${originalBudget.project_name}`);
+
+      // 2. Criar novo orçamento com dados copiados
+      const { data: newBudget, error: createError } = await supabase
+        .from('budgets')
+        .insert({
+          project_name: `${originalBudget.project_name} (Cópia)`,
+          client_name: originalBudget.client_name,
+          city: originalBudget.city,
+          company_id: originalBudget.company_id,
+          user_id: user.id,
+          status: 'Em Andamento', // Sempre iniciar como "Em Andamento"
+          plan_image_url: originalBudget.plan_image_url, // Copiar URL da imagem
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Erro ao criar novo orçamento:', createError);
+        throw createError;
+      }
+
+      console.log(`✅ Novo orçamento criado: ${newBudget.id}`);
+
+      // 3. Buscar todos os postes do orçamento original com seus detalhes
+      const { data: originalPosts, error: postsError } = await supabase
+        .from('budget_posts')
+        .select(`
+          *,
+          post_item_groups (
+            id,
+            name,
+            template_id,
+            post_item_group_materials (
+              material_id,
+              quantity,
+              price_at_addition
+            )
+          ),
+          post_materials (
+            material_id,
+            quantity,
+            price_at_addition
+          )
+        `)
+        .eq('budget_id', budgetId);
+
+      if (postsError) {
+        console.error('Erro ao buscar postes originais:', postsError);
+        throw postsError;
+      }
+
+      console.log(`📍 ${originalPosts?.length || 0} postes encontrados para duplicar`);
+
+      // 4. Duplicar cada poste
+      if (originalPosts && originalPosts.length > 0) {
+        for (const originalPost of originalPosts) {
+          // 4.1. Criar novo poste
+          const { data: newPost, error: postError } = await supabase
+            .from('budget_posts')
+            .insert({
+              budget_id: newBudget.id,
+              post_type_id: originalPost.post_type_id,
+              name: originalPost.name,
+              x_coord: originalPost.x_coord,
+              y_coord: originalPost.y_coord,
+            })
+            .select()
+            .single();
+
+          if (postError) {
+            console.error('Erro ao criar novo poste:', postError);
+            throw postError;
+          }
+
+          console.log(`  ✅ Poste "${originalPost.name}" duplicado`);
+
+          // 4.2. Duplicar grupos de itens do poste
+          if (originalPost.post_item_groups && originalPost.post_item_groups.length > 0) {
+            for (const originalGroup of originalPost.post_item_groups) {
+              // Criar nova instância do grupo
+              const { data: newGroup, error: groupError } = await supabase
+                .from('post_item_groups')
+                .insert({
+                  budget_post_id: newPost.id,
+                  template_id: originalGroup.template_id,
+                  name: originalGroup.name,
+                })
+                .select()
+                .single();
+
+              if (groupError) {
+                console.error('Erro ao criar grupo no poste:', groupError);
+                throw groupError;
+              }
+
+              // Duplicar materiais do grupo
+              if (originalGroup.post_item_group_materials && originalGroup.post_item_group_materials.length > 0) {
+                const groupMaterials = originalGroup.post_item_group_materials.map(material => ({
+                  post_item_group_id: newGroup.id,
+                  material_id: material.material_id,
+                  quantity: material.quantity,
+                  price_at_addition: material.price_at_addition,
+                }));
+
+                const { error: materialsError } = await supabase
+                  .from('post_item_group_materials')
+                  .insert(groupMaterials);
+
+                if (materialsError) {
+                  console.error('Erro ao duplicar materiais do grupo:', materialsError);
+                  throw materialsError;
+                }
+              }
+
+              console.log(`    ✅ Grupo "${originalGroup.name}" duplicado com ${originalGroup.post_item_group_materials?.length || 0} materiais`);
+            }
+          }
+
+          // 4.3. Duplicar materiais avulsos do poste
+          if (originalPost.post_materials && originalPost.post_materials.length > 0) {
+            const looseMaterials = originalPost.post_materials.map(material => ({
+              post_id: newPost.id,
+              material_id: material.material_id,
+              quantity: material.quantity,
+              price_at_addition: material.price_at_addition,
+            }));
+
+            const { error: looseMaterialsError } = await supabase
+              .from('post_materials')
+              .insert(looseMaterials);
+
+            if (looseMaterialsError) {
+              console.error('Erro ao duplicar materiais avulsos:', looseMaterialsError);
+              throw looseMaterialsError;
+            }
+
+            console.log(`    ✅ ${originalPost.post_materials.length} materiais avulsos duplicados`);
+          }
+        }
+      }
+
+      console.log(`🎉 Orçamento duplicado com sucesso!`);
+
+      // 5. Atualizar a lista de orçamentos
+      await fetchBudgets();
+
+      // 6. Definir o novo orçamento como atual e navegar para ele
+      const mappedNewBudget: Orcamento = {
+        id: newBudget.id,
+        nome: newBudget.project_name || '',
+        concessionariaId: newBudget.company_id || '',
+        company_id: newBudget.company_id,
+        dataModificacao: newBudget.updated_at ? new Date(newBudget.updated_at).toISOString().split('T')[0] : '',
+        status: 'Em Andamento',
+        postes: [],
+        ...(newBudget.client_name && { clientName: newBudget.client_name }),
+        ...(newBudget.city && { city: newBudget.city }),
+        ...(newBudget.plan_image_url && { imagemPlanta: newBudget.plan_image_url }),
+      };
+
+      setCurrentOrcamento(mappedNewBudget);
+      setCurrentView('orcamento');
+
+    } catch (error) {
+      console.error('❌ Erro ao duplicar orçamento:', error);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -2294,6 +2490,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addBudget,
       updateBudget,
       deleteBudget,
+      duplicateBudget,
       finalizeBudget,
       fetchBudgetDetails,
       uploadPlanImage,

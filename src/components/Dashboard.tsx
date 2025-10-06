@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Calendar, Building2, Loader2, Edit, Trash2, CheckCircle, Clock, BarChart3, TrendingUp } from 'lucide-react';
+import { Plus, Calendar, Building2, Loader2, Edit, Trash2, Copy, CheckCircle, Clock, BarChart3, TrendingUp } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { CriarOrcamentoModal } from './modals/CriarOrcamentoModal';
 import { AlertDialog } from './ui/alert-dialog';
@@ -15,11 +15,13 @@ export function Dashboard() {
     setCurrentOrcamento, 
     fetchBudgets,
     deleteBudget,
+    duplicateBudget,
     finalizeBudget
   } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Orcamento | null>(null);
   const [isFinalizing, setIsFinalizing] = useState<string | null>(null);
+  const [isDuplicating, setIsDuplicating] = useState<string | null>(null);
   const alertDialog = useAlertDialog();
 
   // Buscar orçamentos na montagem do componente
@@ -108,6 +110,35 @@ export function Dashboard() {
       },
       {
         confirmText: 'Finalizar',
+        cancelText: 'Cancelar'
+      }
+    );
+  };
+
+  const handleDuplicateBudget = (budget: Orcamento) => {
+    alertDialog.showConfirm(
+      'Duplicar Orçamento',
+      `Deseja duplicar o orçamento "${budget.nome}"? Uma cópia completa será criada incluindo todos os postes, grupos e materiais.`,
+      async () => {
+        setIsDuplicating(budget.id);
+        try {
+          await duplicateBudget(budget.id);
+          alertDialog.showSuccess(
+            'Orçamento Duplicado',
+            `O orçamento "${budget.nome}" foi duplicado com sucesso. O novo orçamento foi aberto para edição.`
+          );
+        } catch (error) {
+          console.error("Falha na duplicação do orçamento.", error);
+          alertDialog.showError(
+            'Erro ao Duplicar',
+            'Não foi possível duplicar o orçamento. Tente novamente.'
+          );
+        } finally {
+          setIsDuplicating(null);
+        }
+      },
+      {
+        confirmText: 'Duplicar',
         cancelText: 'Cancelar'
       }
     );
@@ -256,6 +287,17 @@ export function Dashboard() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                handleDuplicateBudget(orcamento);
+                              }}
+                              disabled={isDuplicating === orcamento.id}
+                              className="text-purple-600 hover:text-purple-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Duplicar orçamento"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 handleFinalize(orcamento);
                               }}
                               disabled={isFinalizing === orcamento.id}
@@ -285,6 +327,17 @@ export function Dashboard() {
                               className="text-blue-600 hover:text-blue-900 font-medium"
                             >
                               Visualizar Detalhes
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicateBudget(orcamento);
+                              }}
+                              disabled={isDuplicating === orcamento.id}
+                              className="text-purple-600 hover:text-purple-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Duplicar orçamento"
+                            >
+                              <Copy className="h-4 w-4" />
                             </button>
                             <button
                               onClick={(e) => {
