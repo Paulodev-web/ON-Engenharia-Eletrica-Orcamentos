@@ -1,6 +1,7 @@
-import React from 'react';
-import { Calculator, Package } from 'lucide-react';
+import React, { useState } from 'react';
+import { Calculator, Package, Edit2, Check, X } from 'lucide-react';
 import { BudgetPostDetail, BudgetDetails } from '../types';
+import { useApp } from '../contexts/AppContext';
 
 interface PainelConsolidadoProps {
   budgetDetails: BudgetDetails | null;
@@ -18,6 +19,10 @@ interface MaterialConsolidado {
 }
 
 export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsolidadoProps) {
+  const { updateConsolidatedMaterialPrice } = useApp();
+  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState<string>('');
+  const [isUpdating, setIsUpdating] = useState(false);
   
   const consolidarMateriais = (): MaterialConsolidado[] => {
     if (!budgetDetails || !budgetDetails.posts || budgetDetails.posts.length === 0) {
@@ -25,12 +30,6 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
     }
 
     const materiaisMap = new Map<string, MaterialConsolidado>();
-    
-    // Determinar se o orçamento está finalizado para escolher qual preço usar
-    const isFinalized = budgetDetails.status === 'Finalizado' || budgetDetails.status === 'Concluído';
-    
-    console.log(`💰 Consolidação de materiais - Orçamento ${isFinalized ? 'FINALIZADO' : 'EM ANDAMENTO'}`);
-    console.log(`📋 Status: "${budgetDetails.status}" - Usando preços ${isFinalized ? 'congelados (snapshot)' : 'atuais (catálogo)'}`);
 
     // Percorrer todos os postes
     budgetDetails.posts.forEach(post => {
@@ -48,12 +47,9 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
             existingMaterial.subtotal = existingMaterial.quantidade * existingMaterial.precoUnit;
           } else {
             // Novo material, adicionar ao mapa
-            // LÓGICA CONDICIONAL: 
-            // - Orçamento finalizado: usar price_at_addition (preço congelado do snapshot)
-            // - Orçamento em andamento: usar materialData.price (preço atual do catálogo)
-            const priceToUse = isFinalized ? (material.price_at_addition || 0) : (materialData.price || 0);
-            
-            console.log(`📦 Material: ${materialData.name} - Preço ${isFinalized ? 'congelado' : 'atual'}: R$ ${priceToUse.toFixed(2)}`);
+            // Sempre priorizar price_at_addition se existir (significa que foi editado manualmente)
+            // Caso contrário, usar o preço do catálogo
+            const priceToUse = material.price_at_addition || materialData.price || 0;
             
             materiaisMap.set(materialId, {
               materialId,
@@ -80,10 +76,7 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
           existingMaterial.subtotal = existingMaterial.quantidade * existingMaterial.precoUnit;
         } else {
           // Novo material, adicionar ao mapa
-          // MATERIAIS AVULSOS: price_at_addition sempre correto (preço no momento da adição)
           const priceToUse = material.price_at_addition || 0;
-          
-          console.log(`🔧 Material avulso: ${materialData.name} - Preço no momento da adição: R$ ${priceToUse.toFixed(2)}`);
           
           materiaisMap.set(materialId, {
             materialId,
@@ -115,14 +108,71 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
     }).format(value);
   };
 
+  const handleStartEdit = (materialId: string, currentPrice: number) => {
+    setEditingMaterialId(materialId);
+    setEditingPrice(currentPrice.toFixed(2));
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMaterialId(null);
+    setEditingPrice('');
+  };
+
+  const handleSaveEdit = async (materialId: string) => {
+    if (!budgetDetails) return;
+    
+    const newPrice = parseFloat(editingPrice);
+    
+    // Validações
+    if (isNaN(newPrice)) {
+      alert('Por favor, insira um preço válido');
+      return;
+    }
+    
+    if (newPrice < 0) {
+      alert('O preço não pode ser negativo');
+      return;
+    }
+    
+    try {
+      setIsUpdating(true);
+      console.log('💾 Salvando preço:', { materialId, newPrice, budgetId: budgetDetails.id });
+      await updateConsolidatedMaterialPrice(budgetDetails.id, materialId, newPrice);
+      setEditingMaterialId(null);
+      setEditingPrice('');
+      alert(`Preço atualizado com sucesso para R$ ${newPrice.toFixed(2)}`);
+    } catch (error) {
+      console.error('❌ Erro ao salvar:', error);
+      alert('Erro ao atualizar preço. Por favor, tente novamente.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handlePriceKeyDown = (e: React.KeyboardEvent, materialId: string) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit(materialId);
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
+
   return (
     <div className="bg-gray-50 rounded-lg p-4 h-full flex flex-col">
       <div className="mb-4 flex-shrink-0">
-        <div className="flex items-center space-x-2">
-          <Calculator className="h-5 w-5 text-green-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Consolidação de Materiais</h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center space-x-2">
+              <Calculator className="h-5 w-5 text-green-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Consolidação de Materiais</h3>
+            </div>
+            <p className="text-sm text-gray-600 mt-1">{orcamentoNome}</p>
+          </div>
+          <div className="flex items-center space-x-1 text-xs text-gray-500">
+            <Edit2 className="h-3 w-3" />
+            <span>Clique no ícone para editar preços</span>
+          </div>
         </div>
-        <p className="text-sm text-gray-600 mt-1">{orcamentoNome}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -151,37 +201,94 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Subtotal
                   </th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {materiaisConsolidados.map((material, index) => (
-                  <tr key={material.materialId} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-3">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {material.nome}
-                        </div>
-                        {material.codigo && (
-                          <div className="text-xs text-gray-500">
-                            Código: {material.codigo}
+                {materiaisConsolidados.map((material, index) => {
+                  const isEditing = editingMaterialId === material.materialId;
+                  
+                  return (
+                    <tr key={material.materialId} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-4 py-3">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {material.nome}
                           </div>
+                          {material.codigo && (
+                            <div className="text-xs text-gray-500">
+                              Código: {material.codigo}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        <span className="font-medium">{material.quantidade}</span>
+                        {material.unidade && (
+                          <span className="text-gray-500 ml-1">{material.unidade}</span>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">
-                      <span className="font-medium">{material.quantidade}</span>
-                      {material.unidade && (
-                        <span className="text-gray-500 ml-1">{material.unidade}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-900">
-                      {formatCurrency(material.precoUnit)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                      {formatCurrency(material.subtotal)}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-900">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={editingPrice}
+                            onChange={(e) => setEditingPrice(e.target.value)}
+                            onKeyDown={(e) => handlePriceKeyDown(e, material.materialId)}
+                            className="w-24 px-2 py-1 text-right border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            disabled={isUpdating}
+                            autoFocus
+                          />
+                        ) : (
+                          formatCurrency(material.precoUnit)
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                        {formatCurrency(material.subtotal)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center space-x-1">
+                            {isUpdating ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleSaveEdit(material.materialId)}
+                                  disabled={isUpdating}
+                                  className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Salvar"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  disabled={isUpdating}
+                                  className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Cancelar"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleStartEdit(material.materialId, material.precoUnit)}
+                            className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                            title="Editar Preço"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

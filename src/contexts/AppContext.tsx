@@ -67,6 +67,9 @@ interface AppContextType {
   updateLooseMaterialQuantity: (postMaterialId: string, newQuantity: number) => Promise<void>;
   removeLooseMaterialFromPost: (postMaterialId: string) => Promise<void>;
   
+  // Função para atualizar preços consolidados
+  updateConsolidatedMaterialPrice: (budgetId: string, materialId: string, newPrice: number) => Promise<void>;
+  
   // Funções para concessionárias e grupos
   fetchUtilityCompanies: () => Promise<void>;
   addUtilityCompany: (data: { name: string }) => Promise<void>;
@@ -1772,6 +1775,89 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Função para atualizar preços consolidados de um material em todo o orçamento
+  const updateConsolidatedMaterialPrice = async (budgetId: string, materialId: string, newPrice: number) => {
+    try {
+      // Validar preço
+      if (newPrice < 0) {
+        throw new Error('Preço não pode ser negativo');
+      }
+
+      // Buscar todos os postes do orçamento
+      const { data: posts, error: postsError } = await supabase
+        .from('budget_posts')
+        .select('id')
+        .eq('budget_id', budgetId);
+
+      if (postsError) throw postsError;
+      if (!posts || posts.length === 0) return;
+
+      const postIds = posts.map(p => p.id);
+
+      // Buscar todos os IDs de post_item_groups dos postes
+      const { data: postGroups, error: groupsError } = await supabase
+        .from('post_item_groups')
+        .select('id')
+        .in('budget_post_id', postIds);
+
+      if (!groupsError && postGroups && postGroups.length > 0) {
+        const groupIds = postGroups.map(g => g.id);
+
+        // Atualizar price_at_addition em post_item_group_materials
+        await supabase
+          .from('post_item_group_materials')
+          .update({ price_at_addition: newPrice })
+          .eq('material_id', materialId)
+          .in('post_item_group_id', groupIds);
+      }
+
+      // Atualizar price_at_addition em post_materials (materiais avulsos)
+      await supabase
+        .from('post_materials')
+        .update({ price_at_addition: newPrice })
+        .eq('material_id', materialId)
+        .in('post_id', postIds);
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          posts: prev.posts.map(post => ({
+            ...post,
+            post_item_groups: post.post_item_groups.map(group => ({
+              ...group,
+              post_item_group_materials: group.post_item_group_materials.map(material => {
+                if (material.material_id === materialId) {
+                  return {
+                    ...material,
+                    price_at_addition: newPrice
+                  };
+                }
+                return material;
+              })
+            })),
+            post_materials: post.post_materials.map(material => {
+              if (material.material_id === materialId) {
+                return {
+                  ...material,
+                  price_at_addition: newPrice
+                };
+              }
+              return material;
+            })
+          }))
+        };
+      });
+
+      console.log('✅ Preço atualizado:', { materialId, newPrice });
+    } catch (error) {
+      console.error('❌ Erro ao atualizar preço:', error);
+      throw error;
+    }
+  };
+
   // Funções para concessionárias
   const fetchUtilityCompanies = useCallback(async () => {
     try {
@@ -2225,6 +2311,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addLooseMaterialToPost,
       updateLooseMaterialQuantity,
       removeLooseMaterialFromPost,
+      
+      // Função para atualizar preços consolidados
+      updateConsolidatedMaterialPrice,
       
       // Funções para concessionárias e grupos
       fetchUtilityCompanies,
