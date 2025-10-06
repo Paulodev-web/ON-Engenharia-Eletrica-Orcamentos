@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Calculator, Package, Edit2, Check, X } from 'lucide-react';
+import { Calculator, Package, Edit2, Check, X, FileSpreadsheet, Download } from 'lucide-react';
 import { BudgetPostDetail, BudgetDetails } from '../types';
 import { useApp } from '../contexts/AppContext';
+import { exportToExcel, exportToCSV, MaterialExport, ExportOptions } from '../services/exportService';
 
 interface PainelConsolidadoProps {
   budgetDetails: BudgetDetails | null;
@@ -157,6 +158,70 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
     }
   };
 
+  const handleExportExcel = () => {
+    if (materiaisConsolidados.length === 0) {
+      alert('Não há materiais para exportar');
+      return;
+    }
+
+    const exportData: MaterialExport[] = materiaisConsolidados.map(material => ({
+      materialId: material.materialId,
+      codigo: material.codigo,
+      nome: material.nome,
+      unidade: material.unidade,
+      precoUnit: material.precoUnit,
+      quantidade: material.quantidade,
+      subtotal: material.subtotal,
+    }));
+
+    const exportOptions: ExportOptions = {
+      budgetName: orcamentoNome,
+      totalCost: custoTotal,
+      totalPosts: budgetDetails?.posts?.length || 0,
+      totalUniqueMaterials: materiaisConsolidados.length,
+      exportDate: new Date().toLocaleString('pt-BR'),
+    };
+
+    try {
+      exportToExcel(exportData, exportOptions);
+    } catch (error) {
+      console.error('Erro ao exportar para Excel:', error);
+      alert('Erro ao exportar arquivo Excel. Por favor, tente novamente.');
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (materiaisConsolidados.length === 0) {
+      alert('Não há materiais para exportar');
+      return;
+    }
+
+    const exportData: MaterialExport[] = materiaisConsolidados.map(material => ({
+      materialId: material.materialId,
+      codigo: material.codigo,
+      nome: material.nome,
+      unidade: material.unidade,
+      precoUnit: material.precoUnit,
+      quantidade: material.quantidade,
+      subtotal: material.subtotal,
+    }));
+
+    const exportOptions: ExportOptions = {
+      budgetName: orcamentoNome,
+      totalCost: custoTotal,
+      totalPosts: budgetDetails?.posts?.length || 0,
+      totalUniqueMaterials: materiaisConsolidados.length,
+      exportDate: new Date().toLocaleString('pt-BR'),
+    };
+
+    try {
+      exportToCSV(exportData, exportOptions);
+    } catch (error) {
+      console.error('Erro ao exportar para CSV:', error);
+      alert('Erro ao exportar arquivo CSV. Por favor, tente novamente.');
+    }
+  };
+
   return (
     <div className="bg-gray-50 rounded-lg p-4 h-full flex flex-col">
       <div className="mb-4 flex-shrink-0">
@@ -168,9 +233,32 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
             </div>
             <p className="text-sm text-gray-600 mt-1">{orcamentoNome}</p>
           </div>
-          <div className="flex items-center space-x-1 text-xs text-gray-500">
-            <Edit2 className="h-3 w-3" />
-            <span>Clique no ícone para editar preços</span>
+          <div className="flex items-center space-x-3">
+            {/* Botões de exportação */}
+            {materiaisConsolidados.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium shadow-sm"
+                  title="Exportar para Excel"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>Excel</span>
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
+                  title="Exportar para CSV"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>CSV</span>
+                </button>
+              </div>
+            )}
+            <div className="flex items-center space-x-1 text-xs text-gray-500">
+              <Edit2 className="h-3 w-3" />
+              <span>Clique no ícone para editar preços</span>
+            </div>
           </div>
         </div>
       </div>
