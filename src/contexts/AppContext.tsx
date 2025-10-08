@@ -3,7 +3,7 @@ import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, Budge
 import { gruposItens as initialGrupos, concessionarias, orcamentos as initialOrcamentos } from '../data/mockData';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
-import { processMaterialCSV } from '../services/materialImportService';
+import { processAndUploadMaterials } from '../services/materialImportService';
 
 interface AppContextType {
   materiais: Material[];
@@ -96,6 +96,73 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/**
+ * Função helper para buscar TODOS os registros de uma tabela usando paginação automática
+ * @param tableName - Nome da tabela
+ * @param selectQuery - Query de seleção (ex: '*' ou 'id, name, ...')
+ * @param orderBy - Campo para ordenar
+ * @param ascending - Ordem crescente ou decrescente
+ * @param filters - Filtros adicionais (opcional)
+ * @returns Array com todos os registros
+ */
+async function fetchAllRecords(
+  tableName: string,
+  selectQuery: string = '*',
+  orderBy: string = 'created_at',
+  ascending: boolean = false,
+  filters?: any
+): Promise<any[]> {
+  let allRecords: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  console.log(`🔄 Buscando todos os registros de "${tableName}"...`);
+
+  while (hasMore) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    
+    let query = supabase
+      .from(tableName)
+      .select(selectQuery, { count: 'exact' })
+      .order(orderBy, { ascending })
+      .range(from, to);
+
+    // Aplicar filtros adicionais se fornecidos
+    if (filters) {
+      Object.keys(filters).forEach(key => {
+        query = query.eq(key, filters[key]);
+      });
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error(`Erro ao buscar registros de "${tableName}":`, error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRecords = [...allRecords, ...data];
+      console.log(`📦 ${tableName} - Página ${page + 1}: ${data.length} registros (Total: ${allRecords.length})`);
+      
+      hasMore = data.length === pageSize;
+      page++;
+    } else {
+      hasMore = false;
+    }
+
+    // Log do total no banco (apenas na primeira iteração)
+    if (page === 1 && count !== null) {
+      console.log(`📊 Total de registros em "${tableName}": ${count}`);
+    }
+  }
+
+  console.log(`✅ Busca em "${tableName}" concluída: ${allRecords.length} registros carregados`);
+  return allRecords;
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [materiais, setMateriais] = useState<Material[]>([]);
@@ -136,27 +203,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       setLoadingMaterials(true);
 
-      
-      const { data, error } = await supabase
-        .from('materials')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Erro ao buscar materiais:', error);
-        throw error;
-      }
-
-
+      // Buscar TODOS os materiais usando a função helper de paginação
+      const allMaterials = await fetchAllRecords('materials', '*', 'created_at', false);
 
       // Mapear os dados do banco para o formato do frontend
-      const materiaisFormatados: Material[] = data?.map(item => ({
+      const materiaisFormatados: Material[] = allMaterials.map(item => ({
         id: item.id,
         codigo: item.code || '',
         descricao: item.name || '',
         precoUnit: parseFloat(item.price) || 0,
         unidade: item.unit || '',
-      })) || [];
+      }));
 
       setMateriais(materiaisFormatados);
     } catch (error) {
@@ -304,48 +361,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     
     try {
-      // Chamar o serviço de processamento do CSV
-      const result = await processMaterialCSV(file);
+      // Chamar o serviço que processa e envia em lotes automaticamente
+      const result = await processAndUploadMaterials(file);
       
       // Verificar se o processamento foi bem-sucedido
-      if (!result.success || !result.data) {
+      if (!result.success) {
         return { success: false, message: result.message };
       }
-
-      const processedMaterials = result.data;
-      const totalProcessed = processedMaterials.length;
-
-      console.log(`📊 Total de materiais processados da planilha: ${totalProcessed}`);
-
-      // Chamar a função do banco que ignora duplicatas automaticamente
-      const { data: importStats, error: importError } = await supabase
-        .rpc('import_materials_ignore_duplicates', { 
-          materials_data: processedMaterials 
-        });
-
-      if (importError) {
-        console.error('❌ Erro ao importar materiais:', importError);
-        throw new Error(importError.message);
-      }
-
-      const inserted = importStats?.inserted || 0;
-      const skipped = importStats?.skipped || 0;
-
-      console.log(`✨ Materiais novos inseridos: ${inserted}`);
-      console.log(`⏭️ Materiais ignorados (já existiam): ${skipped}`);
 
       // Recarregar os dados após importação
       await fetchAllCoreData();
       
-      // Montar mensagem de retorno
-      let message = '';
-      if (inserted === 0 && skipped > 0) {
-        message = `Todos os ${totalProcessed} materiais da planilha já existiam no banco de dados. Nenhum material novo foi inserido.`;
-      } else if (inserted > 0 && skipped > 0) {
-        message = `✅ ${inserted} materiais novos foram importados com sucesso! (${skipped} já existiam e foram ignorados)`;
-      } else {
-        message = `✅ ${inserted} materiais foram importados com sucesso!`;
-      }
+      // A mensagem já vem formatada do serviço com as estatísticas
+      let message = result.message;
 
       return { 
         success: true, 
@@ -374,24 +402,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoadingBudgets(true);
 
       
-      const { data, error } = await supabase
-        .from('budgets')
-        .select('*, plan_image_url')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-
-
-      if (error) {
-        console.error('Erro ao buscar orçamentos:', error);
-        throw error;
-      }
+      // Buscar TODOS os orçamentos usando a função helper de paginação
+      const data = await fetchAllRecords('budgets', '*, plan_image_url', 'created_at', false, { user_id: user.id });
 
 
 
 
       // Mapear os dados do banco para o formato do frontend
-      const orcamentosFormatados: Orcamento[] = data?.map(item => {
+      const orcamentosFormatados: Orcamento[] = data.map(item => {
         // Log para debugar status vindos do banco
         console.log(`📋 Orçamento ${item.project_name}: status = "${item.status}" (tipo: ${typeof item.status})`);
         
@@ -413,9 +431,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...(item.city && { city: item.city }),
           ...(item.plan_image_url && { imagemPlanta: item.plan_image_url }),
         };
-      }) || [];
-
-
+      });
 
       setBudgets(orcamentosFormatados);
     } catch (error) {
@@ -615,7 +631,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.log(`✅ Novo orçamento criado: ${newBudget.id}`);
 
       // 3. Buscar todos os postes do orçamento original com seus detalhes
-      const { data: originalPosts, error: postsError } = await supabase
+      const { data: originalPosts, error: postsError, count: postsCount } = await supabase
         .from('budget_posts')
         .select(`
           *,
@@ -634,8 +650,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             quantity,
             price_at_addition
           )
-        `)
-        .eq('budget_id', budgetId);
+        `, { count: 'exact' })
+        .eq('budget_id', budgetId)
+        .range(0, 10000); // Aumentar limite para 10.000 registros
+      
+      console.log(`📊 Total de postes no orçamento: ${postsCount}, postes carregados: ${originalPosts?.length || 0}`);
 
       if (postsError) {
         console.error('Erro ao buscar postes originais:', postsError);
@@ -973,7 +992,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       
       // Query aninhada para buscar todos os postes relacionados ao orçamento
-      const { data: postsData, error: postsError } = await supabase
+      const { data: postsData, error: postsError, count: postsCount } = await supabase
         .from('budget_posts')
         .select(`
           id,
@@ -1021,9 +1040,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
               price
             )
           )
-        `)
+        `, { count: 'exact' })
         .eq('budget_id', budgetId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .range(0, 10000); // Aumentar limite para 10.000 registros
+      
+      console.log(`📊 Total de postes no orçamento ${budgetId}: ${postsCount}, postes carregados: ${postsData?.length || 0}`);
 
       if (postsError) {
         console.error('ERRO DETALHADO DO SUPABASE (posts):', postsError);
@@ -1139,20 +1161,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoadingPostTypes(true);
 
       
-      const { data, error } = await supabase
-        .from('post_types')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (error) {
-        console.error('Erro ao buscar tipos de poste:', error);
-        throw error;
-      }
+      // Buscar TODOS os tipos de poste usando a função helper de paginação
+      const data = await fetchAllRecords('post_types', '*', 'name', true);
 
 
 
       // Mapear os dados do banco para o formato do frontend
-      const postTypesFormatted: PostType[] = data?.map(item => ({
+      const postTypesFormatted: PostType[] = data.map(item => ({
         id: item.id,
         name: item.name || '',
         code: item.code || undefined,
@@ -1160,7 +1175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         shape: item.shape || undefined,
         height_m: item.height_m || undefined,
         price: parseFloat(item.price) || 0,
-      })) || [];
+      }));
 
       setPostTypes(postTypesFormatted);
     } catch (error) {
@@ -1983,7 +1998,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: posts, error: postsError } = await supabase
         .from('budget_posts')
         .select('id')
-        .eq('budget_id', budgetId);
+        .eq('budget_id', budgetId)
+        .range(0, 10000); // Aumentar limite para 10.000 registros
 
       if (postsError) throw postsError;
       if (!posts || posts.length === 0) return;
@@ -1994,7 +2010,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { data: postGroups, error: groupsError } = await supabase
         .from('post_item_groups')
         .select('id')
-        .in('budget_post_id', postIds);
+        .in('budget_post_id', postIds)
+        .range(0, 10000); // Aumentar limite para 10.000 registros
 
       if (!groupsError && postGroups && postGroups.length > 0) {
         const groupIds = postGroups.map(g => g.id);
@@ -2060,24 +2077,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoadingCompanies(true);
 
       
-      const { data, error } = await supabase
-        .from('utility_companies')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (error) {
-        console.error('Erro ao buscar concessionárias:', error);
-        throw error;
-      }
+      // Buscar TODAS as concessionárias usando a função helper de paginação
+      const data = await fetchAllRecords('utility_companies', '*', 'name', true);
 
 
 
       // Mapear os dados do banco para o formato do frontend
-      const concessionariasFormatadas: Concessionaria[] = data?.map(item => ({
+      const concessionariasFormatadas: Concessionaria[] = data.map(item => ({
         id: item.id,
         nome: item.name || '',
         sigla: item.name || '', // Usando name como sigla até termos campo específico
-      })) || [];
+      }));
 
       setUtilityCompanies(concessionariasFormatadas);
     } catch (error) {
@@ -2200,7 +2210,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       
       // Buscar templates de grupos para a empresa
-      const { data: templatesData, error: templatesError } = await supabase
+      const { data: templatesData, error: templatesError, count } = await supabase
         .from('item_group_templates')
         .select(`
           id,
@@ -2218,8 +2228,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
               unit
             )
           )
-        `)
-        .eq('company_id', companyId);
+        `, { count: 'exact' })
+        .eq('company_id', companyId)
+        .range(0, 10000); // Aumentar limite para 10.000 registros
+      
+      console.log(`📊 Total de grupos de itens no banco: ${count}, grupos carregados: ${templatesData?.length || 0}`);
 
       if (templatesError) {
         console.error('Erro ao buscar templates de grupos:', templatesError);

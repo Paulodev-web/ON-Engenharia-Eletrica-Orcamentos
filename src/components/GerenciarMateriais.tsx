@@ -165,7 +165,14 @@ export function GerenciarMateriais() {
       <div className="flex justify-between items-center flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Gerenciar Materiais</h2>
-          <p className="text-gray-600">Cadastre e gerencie o catálogo completo de materiais</p>
+          <p className="text-gray-600">
+            Cadastre e gerencie o catálogo completo de materiais
+            {materiais.length > 0 && (
+              <span className="ml-2 text-blue-600 font-semibold">
+                ({materiais.length} {materiais.length === 1 ? 'material' : 'materiais'} carregados)
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex space-x-3">
           <button 
@@ -185,7 +192,7 @@ export function GerenciarMateriais() {
             type="file"
             ref={fileInputRef}
             onChange={handleFileImport}
-            accept=".csv"
+            accept=".xlsx,.xls"
             className="hidden"
           />
           {/* Botão que aciona o input */}
@@ -266,6 +273,11 @@ export function GerenciarMateriais() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+          {searchTerm && (
+            <p className="mt-2 text-sm text-gray-600">
+              Mostrando {filteredMateriais.length} de {materiais.length} materiais
+            </p>
+          )}
         </div>
 
         {/* Loading State */}
