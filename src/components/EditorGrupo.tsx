@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Minus, Save, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, Plus, Minus, Save, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAlertDialog } from '../hooks/useAlertDialog';
 import { AlertDialog } from './ui/alert-dialog';
@@ -60,29 +60,93 @@ export function EditorGrupo() {
     fetchMaterials();
   }, [fetchMaterials]);
 
+  // Função para calcular relevância da busca
+  const getSearchRelevance = (material: Material, term: string): number => {
+    if (!term) return 0;
+    
+    const searchLower = term.toLowerCase();
+    const codigoLower = material.codigo.toLowerCase();
+    const descricaoLower = material.descricao.toLowerCase();
+    
+    let score = 0;
+    
+    // Pontuação para código
+    if (codigoLower === searchLower) {
+      score += 1000; // Match exato no código
+    } else if (codigoLower.startsWith(searchLower)) {
+      score += 500; // Código começa com o termo
+    } else if (codigoLower.includes(searchLower)) {
+      score += 100; // Código contém o termo
+    }
+    
+    // Pontuação para descrição
+    const palavras = descricaoLower.split(/\s+/);
+    
+    // Match exato de palavra completa
+    if (palavras.some(palavra => palavra === searchLower)) {
+      score += 800;
+    }
+    
+    // Palavra começa com o termo
+    const palavrasComeçam = palavras.filter(palavra => palavra.startsWith(searchLower));
+    if (palavrasComeçam.length > 0) {
+      score += 400 * palavrasComeçam.length;
+    }
+    
+    // Primeira palavra da descrição
+    if (palavras[0]?.startsWith(searchLower)) {
+      score += 300; // Bonus se for a primeira palavra
+    }
+    
+    // Descrição começa com o termo (mesmo que não seja palavra completa)
+    if (descricaoLower.startsWith(searchLower)) {
+      score += 200;
+    }
+    
+    // Apenas contém o termo (menor prioridade)
+    if (descricaoLower.includes(searchLower)) {
+      score += 50;
+    }
+    
+    return score;
+  };
+
   // Filtrar e ordenar materiais
   const materiaisFiltrados = materiais
-    .filter(material =>
-      material.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      material.descricao.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(material => {
+      const searchLower = searchTerm.toLowerCase();
+      return material.codigo.toLowerCase().includes(searchLower) ||
+             material.descricao.toLowerCase().includes(searchLower);
+    })
+    .map(material => ({
+      material,
+      relevance: searchTerm ? getSearchRelevance(material, searchTerm) : 0
+    }))
     .sort((a, b) => {
+      // Se há busca ativa, ordenar por relevância primeiro
+      if (searchTerm) {
+        const relevanceDiff = b.relevance - a.relevance;
+        if (relevanceDiff !== 0) return relevanceDiff;
+      }
+      
+      // Ordenação normal quando não há busca ou relevância igual
       let comparison = 0;
       
       switch (sortField) {
         case 'descricao':
-          comparison = a.descricao.localeCompare(b.descricao, 'pt-BR', { sensitivity: 'base' });
+          comparison = a.material.descricao.localeCompare(b.material.descricao, 'pt-BR', { sensitivity: 'base' });
           break;
         case 'codigo':
-          comparison = a.codigo.localeCompare(b.codigo, 'pt-BR', { sensitivity: 'base' });
+          comparison = a.material.codigo.localeCompare(b.material.codigo, 'pt-BR', { sensitivity: 'base' });
           break;
         case 'precoUnit':
-          comparison = a.precoUnit - b.precoUnit;
+          comparison = a.material.precoUnit - b.material.precoUnit;
           break;
       }
       
       return sortOrder === 'asc' ? comparison : -comparison;
-    });
+    })
+    .map(item => item.material);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -205,10 +269,34 @@ export function EditorGrupo() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar material..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               disabled={saving}
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                title="Limpar busca"
+                disabled={saving}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
           </div>
+          
+          {/* Feedback de busca */}
+          {searchTerm && (
+            <div className="mt-2 mb-2 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-700 font-medium">
+                  🔍 Buscando: "{searchTerm}"
+                </span>
+                <span className="text-blue-600">
+                  {materiaisFiltrados.length} resultado{materiaisFiltrados.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+          )}
           
           {/* Controles de ordenação */}
           <div className="mt-2 flex items-center space-x-2 text-xs">
@@ -249,11 +337,6 @@ export function EditorGrupo() {
               Preço
               {getSortIcon('precoUnit')}
             </button>
-            {searchTerm && (
-              <span className="text-gray-500 ml-auto">
-                {materiaisFiltrados.length} resultado{materiaisFiltrados.length !== 1 ? 's' : ''}
-              </span>
-            )}
           </div>
         </div>
 

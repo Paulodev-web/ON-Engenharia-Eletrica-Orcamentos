@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, Upload, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Upload, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAlertDialog } from '../hooks/useAlertDialog';
 import { AlertDialog } from './ui/alert-dialog';
@@ -64,29 +64,93 @@ export function GerenciarMateriais() {
     fileInputRef.current?.click();
   };
 
+  // Função para calcular relevância da busca
+  const getSearchRelevance = (material: Material, term: string): number => {
+    if (!term) return 0;
+    
+    const searchLower = term.toLowerCase();
+    const codigoLower = material.codigo.toLowerCase();
+    const descricaoLower = material.descricao.toLowerCase();
+    
+    let score = 0;
+    
+    // Pontuação para código
+    if (codigoLower === searchLower) {
+      score += 1000; // Match exato no código
+    } else if (codigoLower.startsWith(searchLower)) {
+      score += 500; // Código começa com o termo
+    } else if (codigoLower.includes(searchLower)) {
+      score += 100; // Código contém o termo
+    }
+    
+    // Pontuação para descrição
+    const palavras = descricaoLower.split(/\s+/);
+    
+    // Match exato de palavra completa
+    if (palavras.some(palavra => palavra === searchLower)) {
+      score += 800;
+    }
+    
+    // Palavra começa com o termo
+    const palavrasComeçam = palavras.filter(palavra => palavra.startsWith(searchLower));
+    if (palavrasComeçam.length > 0) {
+      score += 400 * palavrasComeçam.length;
+    }
+    
+    // Primeira palavra da descrição
+    if (palavras[0]?.startsWith(searchLower)) {
+      score += 300; // Bonus se for a primeira palavra
+    }
+    
+    // Descrição começa com o termo (mesmo que não seja palavra completa)
+    if (descricaoLower.startsWith(searchLower)) {
+      score += 200;
+    }
+    
+    // Apenas contém o termo (menor prioridade)
+    if (descricaoLower.includes(searchLower)) {
+      score += 50;
+    }
+    
+    return score;
+  };
+
   // Filtrar e ordenar materiais
   const filteredMateriais = materiais
-    .filter(material =>
-      material.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      material.descricao.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(material => {
+      const searchLower = searchTerm.toLowerCase();
+      return material.codigo.toLowerCase().includes(searchLower) ||
+             material.descricao.toLowerCase().includes(searchLower);
+    })
+    .map(material => ({
+      material,
+      relevance: searchTerm ? getSearchRelevance(material, searchTerm) : 0
+    }))
     .sort((a, b) => {
+      // Se há busca ativa, ordenar por relevância primeiro
+      if (searchTerm) {
+        const relevanceDiff = b.relevance - a.relevance;
+        if (relevanceDiff !== 0) return relevanceDiff;
+      }
+      
+      // Ordenação normal quando não há busca ou relevância igual
       let comparison = 0;
       
       switch (sortField) {
         case 'descricao':
-          comparison = a.descricao.localeCompare(b.descricao, 'pt-BR', { sensitivity: 'base' });
+          comparison = a.material.descricao.localeCompare(b.material.descricao, 'pt-BR', { sensitivity: 'base' });
           break;
         case 'codigo':
-          comparison = a.codigo.localeCompare(b.codigo, 'pt-BR', { sensitivity: 'base' });
+          comparison = a.material.codigo.localeCompare(b.material.codigo, 'pt-BR', { sensitivity: 'base' });
           break;
         case 'precoUnit':
-          comparison = a.precoUnit - b.precoUnit;
+          comparison = a.material.precoUnit - b.material.precoUnit;
           break;
       }
       
       return sortOrder === 'asc' ? comparison : -comparison;
-    });
+    })
+    .map(item => item.material);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -314,14 +378,32 @@ export function GerenciarMateriais() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar por código ou descrição..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                title="Limpar busca"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
           </div>
-          <div className="mt-2 flex items-center justify-between text-sm text-gray-600">
+          <div className="mt-2 flex items-center justify-between text-sm">
             <div>
-              {searchTerm && (
-                <span>
-                  Mostrando {filteredMateriais.length} de {materiais.length} materiais
+              {searchTerm ? (
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
+                    🔍 Buscando: "{searchTerm}"
+                  </span>
+                  <span className="text-gray-600">
+                    {filteredMateriais.length} {filteredMateriais.length === 1 ? 'resultado' : 'resultados'} encontrado{filteredMateriais.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-gray-500">
+                  {materiais.length} materiais disponíveis
                 </span>
               )}
             </div>
