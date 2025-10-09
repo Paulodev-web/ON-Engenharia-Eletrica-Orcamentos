@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, ErrorInfo } from 'react';
-import { X, Loader2, Search, Plus, Minus, Package, Folder } from 'lucide-react';
+import { X, Loader2, Search, Plus, Minus, Package, Folder, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { useAlertDialog } from '../../hooks/useAlertDialog';
 import { AlertDialog } from '../ui/alert-dialog';
+import { Material } from '../../types';
 
 // ErrorBoundary específico para o modal
 class ModalErrorBoundary extends React.Component<
@@ -62,6 +63,8 @@ interface AddPostModalProps {
 }
 
 type TabType = 'post' | 'groups' | 'materials';
+type SortField = 'descricao' | 'codigo' | 'precoUnit';
+type SortOrder = 'asc' | 'desc';
 
 function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitWithItems }: AddPostModalProps) {
   const { 
@@ -93,6 +96,8 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
   const [selectedMaterials, setSelectedMaterials] = useState<{materialId: string, quantity: number}[]>([]);
   const [materialSearchTerm, setMaterialSearchTerm] = useState('');
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('descricao');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   // Resetar formulário quando modal abre/fecha
   useEffect(() => {
@@ -233,6 +238,70 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
     );
   }, [removeMaterial]);
 
+  // Função para calcular relevância da busca
+  const getSearchRelevance = useCallback((material: Material, term: string): number => {
+    if (!term) return 0;
+    
+    const searchLower = term.toLowerCase();
+    const codigoLower = material.codigo.toLowerCase();
+    const descricaoLower = material.descricao.toLowerCase();
+    
+    let score = 0;
+    
+    // Pontuação para código
+    if (codigoLower === searchLower) {
+      score += 1000;
+    } else if (codigoLower.startsWith(searchLower)) {
+      score += 500;
+    } else if (codigoLower.includes(searchLower)) {
+      score += 100;
+    }
+    
+    // Pontuação para descrição
+    const palavras = descricaoLower.split(/\s+/);
+    
+    if (palavras.some(palavra => palavra === searchLower)) {
+      score += 800;
+    }
+    
+    const palavrasComeçam = palavras.filter(palavra => palavra.startsWith(searchLower));
+    if (palavrasComeçam.length > 0) {
+      score += 400 * palavrasComeçam.length;
+    }
+    
+    if (palavras[0]?.startsWith(searchLower)) {
+      score += 300;
+    }
+    
+    if (descricaoLower.startsWith(searchLower)) {
+      score += 200;
+    }
+    
+    if (descricaoLower.includes(searchLower)) {
+      score += 50;
+    }
+    
+    return score;
+  }, []);
+
+  const handleSort = useCallback((field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  }, [sortField, sortOrder]);
+
+  const getSortIcon = useCallback((field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />;
+    }
+    return sortOrder === 'asc' 
+      ? <ArrowUp className="h-3 w-3 ml-1 text-blue-600" />
+      : <ArrowDown className="h-3 w-3 ml-1 text-blue-600" />;
+  }, [sortField, sortOrder]);
+
   // Filtros (memoizados para evitar re-cálculos desnecessários)
   const filteredGroups = useMemo(() => {
     return itemGroups.filter(group =>
@@ -241,11 +310,42 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
   }, [itemGroups, groupSearchTerm]);
 
   const filteredMaterials = useMemo(() => {
-    return materiais.filter(material =>
-      material.descricao.toLowerCase().includes(materialSearchTerm.toLowerCase()) ||
-      material.codigo.toLowerCase().includes(materialSearchTerm.toLowerCase())
-    );
-  }, [materiais, materialSearchTerm]);
+    return materiais
+      .filter(material => {
+        const searchLower = materialSearchTerm.toLowerCase();
+        return material.descricao.toLowerCase().includes(searchLower) ||
+               material.codigo.toLowerCase().includes(searchLower);
+      })
+      .map(material => ({
+        material,
+        relevance: materialSearchTerm ? getSearchRelevance(material, materialSearchTerm) : 0
+      }))
+      .sort((a, b) => {
+        // Se há busca ativa, ordenar por relevância primeiro
+        if (materialSearchTerm) {
+          const relevanceDiff = b.relevance - a.relevance;
+          if (relevanceDiff !== 0) return relevanceDiff;
+        }
+        
+        // Ordenação normal quando não há busca ou relevância igual
+        let comparison = 0;
+        
+        switch (sortField) {
+          case 'descricao':
+            comparison = a.material.descricao.localeCompare(b.material.descricao, 'pt-BR', { sensitivity: 'base' });
+            break;
+          case 'codigo':
+            comparison = a.material.codigo.localeCompare(b.material.codigo, 'pt-BR', { sensitivity: 'base' });
+            break;
+          case 'precoUnit':
+            comparison = a.material.precoUnit - b.material.precoUnit;
+            break;
+        }
+        
+        return sortOrder === 'asc' ? comparison : -comparison;
+      })
+      .map(item => item.material);
+  }, [materiais, materialSearchTerm, sortField, sortOrder, getSearchRelevance]);
 
   const availableMaterials = useMemo(() => {
     // Criar uma cópia dos arrays para evitar mutações
@@ -529,15 +629,82 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Adicionar Materiais
                     </label>
-                    <div className="relative mb-4">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                      <input
-                        type="text"
-                        placeholder="Buscar materiais..."
-                        value={materialSearchTerm}
-                        onChange={(e) => setMaterialSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                    <div className="mb-4">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <input
+                          type="text"
+                          placeholder="Buscar materiais..."
+                          value={materialSearchTerm}
+                          onChange={(e) => setMaterialSearchTerm(e.target.value)}
+                          className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        {materialSearchTerm && (
+                          <button
+                            type="button"
+                            onClick={() => setMaterialSearchTerm('')}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                            title="Limpar busca"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Feedback de busca */}
+                      {materialSearchTerm && (
+                        <div className="mt-2 mb-2 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-blue-700 font-medium">
+                              🔍 Buscando: "{materialSearchTerm}"
+                            </span>
+                            <span className="text-blue-600">
+                              {availableMaterials.length} resultado{availableMaterials.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Controles de ordenação */}
+                      <div className="mt-2 flex items-center space-x-2 text-xs">
+                        <span className="text-gray-500">Ordenar:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleSort('descricao')}
+                          className={`flex items-center px-2 py-1 rounded transition-colors ${
+                            sortField === 'descricao'
+                              ? 'bg-blue-100 text-blue-700 font-medium'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Descrição
+                          {getSortIcon('descricao')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSort('codigo')}
+                          className={`flex items-center px-2 py-1 rounded transition-colors ${
+                            sortField === 'codigo'
+                              ? 'bg-blue-100 text-blue-700 font-medium'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Código
+                          {getSortIcon('codigo')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSort('precoUnit')}
+                          className={`flex items-center px-2 py-1 rounded transition-colors ${
+                            sortField === 'precoUnit'
+                              ? 'bg-blue-100 text-blue-700 font-medium'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Preço
+                          {getSortIcon('precoUnit')}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
