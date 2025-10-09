@@ -215,7 +215,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         unidade: item.unit || '',
       }));
 
-      setMateriais(materiaisFormatados);
+      // Remover duplicatas baseado no ID (manter apenas o primeiro)
+      const materiaisUnicos: Material[] = [];
+      const idsVistos = new Set<string>();
+      
+      for (const material of materiaisFormatados) {
+        if (!idsVistos.has(material.id)) {
+          idsVistos.add(material.id);
+          materiaisUnicos.push(material);
+        } else {
+          console.warn(`⚠️ Material duplicado detectado e ignorado: ID ${material.id} - ${material.descricao}`);
+        }
+      }
+
+      console.log(`📊 Total de materiais: ${allMaterials.length}, Únicos: ${materiaisUnicos.length}, Duplicatas removidas: ${allMaterials.length - materiaisUnicos.length}`);
+
+      setMateriais(materiaisUnicos);
     } catch (error) {
       console.error('Erro ao buscar materiais:', error);
       // Em caso de erro, mantém a lista vazia

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, Upload, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Upload, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAlertDialog } from '../hooks/useAlertDialog';
 import { AlertDialog } from './ui/alert-dialog';
 import { Material } from '../types';
+
+type SortField = 'descricao' | 'codigo' | 'precoUnit';
+type SortOrder = 'asc' | 'desc';
 
 export function GerenciarMateriais() {
   const { materiais, loadingMaterials, fetchMaterials, addMaterial, updateMaterial, deleteMaterial, deleteAllMaterials, importMaterialsFromCSV } = useApp();
@@ -12,6 +15,8 @@ export function GerenciarMateriais() {
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [operationLoading, setOperationLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [sortField, setSortField] = useState<SortField>('descricao');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   
   // Adicione os seguintes estados e a ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,10 +64,49 @@ export function GerenciarMateriais() {
     fileInputRef.current?.click();
   };
 
-  const filteredMateriais = materiais.filter(material =>
-    material.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    material.descricao.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filtrar e ordenar materiais
+  const filteredMateriais = materiais
+    .filter(material =>
+      material.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      material.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'descricao':
+          comparison = a.descricao.localeCompare(b.descricao, 'pt-BR', { sensitivity: 'base' });
+          break;
+        case 'codigo':
+          comparison = a.codigo.localeCompare(b.codigo, 'pt-BR', { sensitivity: 'base' });
+          break;
+        case 'precoUnit':
+          comparison = a.precoUnit - b.precoUnit;
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Se clicar no mesmo campo, inverte a ordem
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Se clicar em um campo diferente, define esse campo e ordem crescente
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 opacity-30" />;
+    }
+    return sortOrder === 'asc' 
+      ? <ArrowUp className="h-4 w-4 ml-1 text-blue-600" />
+      : <ArrowDown className="h-4 w-4 ml-1 text-blue-600" />;
+  };
 
   const handleEdit = (material: Material) => {
     if (operationLoading) return;
@@ -273,11 +317,28 @@ export function GerenciarMateriais() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-          {searchTerm && (
-            <p className="mt-2 text-sm text-gray-600">
-              Mostrando {filteredMateriais.length} de {materiais.length} materiais
-            </p>
-          )}
+          <div className="mt-2 flex items-center justify-between text-sm text-gray-600">
+            <div>
+              {searchTerm && (
+                <span>
+                  Mostrando {filteredMateriais.length} de {materiais.length} materiais
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-500">
+                Ordenado por: 
+              </span>
+              <span className="font-medium text-gray-700">
+                {sortField === 'descricao' && 'Descrição'}
+                {sortField === 'codigo' && 'Código'}
+                {sortField === 'precoUnit' && 'Preço'}
+              </span>
+              <span className="text-gray-500">
+                ({sortOrder === 'asc' ? 'A-Z' : 'Z-A'})
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Loading State */}
@@ -294,14 +355,32 @@ export function GerenciarMateriais() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Código
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      onClick={() => handleSort('codigo')}
+                    >
+                      <div className="flex items-center">
+                        Código
+                        {getSortIcon('codigo')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Descrição
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      onClick={() => handleSort('descricao')}
+                    >
+                      <div className="flex items-center">
+                        Descrição
+                        {getSortIcon('descricao')}
+                      </div>
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Preço Unit.
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                      onClick={() => handleSort('precoUnit')}
+                    >
+                      <div className="flex items-center">
+                        Preço Unit.
+                        {getSortIcon('precoUnit')}
+                      </div>
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Unidade
