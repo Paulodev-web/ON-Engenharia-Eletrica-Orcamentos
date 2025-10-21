@@ -20,8 +20,6 @@ class ModalErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
-    console.error('Erro no modal:', error);
-    
     if (this.props.onError) {
       this.props.onError();
     }
@@ -98,6 +96,7 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
   const [sortField, setSortField] = useState<SortField>('descricao');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [inputStates, setInputStates] = useState<Record<string, string>>({});
 
   // Resetar formulário quando modal abre/fecha
   useEffect(() => {
@@ -111,6 +110,7 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
         setGroupSearchTerm('');
         setMaterialSearchTerm('');
         setActiveTab('post');
+        setInputStates({});
       }, 0);
       
       // Carregar grupos da concessionária atual
@@ -157,7 +157,6 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
       );
       onClose();
     } catch (error) {
-      console.error('Erro ao adicionar poste:', error);
       alertDialog.showError(
         'Erro ao Adicionar Poste',
         'Não foi possível adicionar o poste. Tente novamente.'
@@ -212,7 +211,6 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
       // Aguardar outro tick para garantir que a renderização foi processada
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (error) {
-      console.error('Erro ao adicionar material:', error);
       throw error; // Re-throw para ser capturado pelo ErrorBoundary
     } finally {
       setIsAddingMaterial(false);
@@ -237,6 +235,39 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
       )
     );
   }, [removeMaterial]);
+
+  const handleQuantityInputChange = useCallback((materialId: string, value: string) => {
+    // Atualizar o estado do input imediatamente para permitir edição livre
+    setInputStates(prev => ({ ...prev, [materialId]: value }));
+    
+    // Aceitar vírgula ou ponto como separador decimal
+    const normalizedValue = value.replace(',', '.');
+    const quantity = parseFloat(normalizedValue);
+    
+    // Se o valor for válido e positivo, atualizar
+    if (!isNaN(quantity) && quantity > 0) {
+      updateMaterialQuantity(materialId, quantity);
+    }
+  }, [updateMaterialQuantity]);
+
+  const handleQuantityBlur = useCallback((materialId: string, value: string) => {
+    // Ao sair do campo, validar e corrigir se necessário
+    const normalizedValue = value.replace(',', '.');
+    const quantity = parseFloat(normalizedValue);
+    
+    if (isNaN(quantity) || quantity <= 0) {
+      // Se inválido, definir como 1
+      updateMaterialQuantity(materialId, 1);
+      setInputStates(prev => ({ ...prev, [materialId]: '1' }));
+    } else {
+      // Limpar o estado do input (usar o valor do state)
+      setInputStates(prev => {
+        const newState = { ...prev };
+        delete newState[materialId];
+        return newState;
+      });
+    }
+  }, [updateMaterialQuantity]);
 
   // Função para calcular relevância da busca
   const getSearchRelevance = useCallback((material: Material, term: string): number => {
@@ -589,22 +620,40 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
                               <div className="flex items-center space-x-2">
                                 <button
                                   type="button"
-                                  onClick={() => updateMaterialQuantity(selectedMaterial.materialId, selectedMaterial.quantity - 1)}
-                                  className="p-1 text-gray-400 hover:text-gray-600"
+                                  onClick={() => {
+                                    const newQty = Math.max(1, selectedMaterial.quantity - 1);
+                                    updateMaterialQuantity(selectedMaterial.materialId, newQty);
+                                    setInputStates(prev => {
+                                      const newState = { ...prev };
+                                      delete newState[selectedMaterial.materialId];
+                                      return newState;
+                                    });
+                                  }}
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                  title="Diminuir 1"
                                 >
                                   <Minus className="h-4 w-4" />
                                 </button>
                                 <input
-                                  type="number"
-                                  min="1"
-                                  value={selectedMaterial.quantity}
-                                  onChange={(e) => updateMaterialQuantity(selectedMaterial.materialId, parseInt(e.target.value) || 1)}
-                                  className="w-16 px-2 py-1 text-center border border-gray-300 rounded"
+                                  type="text"
+                                  value={inputStates[selectedMaterial.materialId] ?? selectedMaterial.quantity.toString().replace('.', ',')}
+                                  onChange={(e) => handleQuantityInputChange(selectedMaterial.materialId, e.target.value)}
+                                  onBlur={(e) => handleQuantityBlur(selectedMaterial.materialId, e.target.value)}
+                                  className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  placeholder="1"
                                 />
                                 <button
                                   type="button"
-                                  onClick={() => updateMaterialQuantity(selectedMaterial.materialId, selectedMaterial.quantity + 1)}
-                                  className="p-1 text-gray-400 hover:text-gray-600"
+                                  onClick={() => {
+                                    updateMaterialQuantity(selectedMaterial.materialId, selectedMaterial.quantity + 1);
+                                    setInputStates(prev => {
+                                      const newState = { ...prev };
+                                      delete newState[selectedMaterial.materialId];
+                                      return newState;
+                                    });
+                                  }}
+                                  className="p-1 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                                  title="Aumentar 1"
                                 >
                                   <Plus className="h-4 w-4" />
                                 </button>
@@ -733,7 +782,7 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
                                 try {
                                   await addMaterial(material.id);
                                 } catch (error) {
-                                  console.error('Erro ao adicionar material:', error);
+                                  // Erro será capturado pelo ErrorBoundary
                                 }
                               }}
                               disabled={isAddingMaterial}

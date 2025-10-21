@@ -29,13 +29,6 @@ export function Dashboard() {
     fetchBudgets();
   }, [fetchBudgets]);
 
-  // Debug: Verificar status dos orçamentos quando a lista muda
-  useEffect(() => {
-    console.log('📊 Status dos orçamentos carregados:', 
-      budgets.map(b => ({ nome: b.nome, status: b.status }))
-    );
-  }, [budgets]);
-
   const handleAbrirOrcamento = (orcamentoId: string) => {
     const orcamento = budgets.find(o => o.id === orcamentoId);
 
@@ -246,9 +239,6 @@ export function Dashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {/* Debug log para verificar status */}
-                      {console.log(`🎯 Dashboard - Orçamento ${orcamento.nome}: status = "${orcamento.status}"`)}
-                      
                       {orcamento.status === 'Finalizado' ? (
                         <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
                           <div className="w-2 h-2 bg-green-600 rounded-full mr-1.5"></div>

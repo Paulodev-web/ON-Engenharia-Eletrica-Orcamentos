@@ -97,6 +97,18 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 /**
+ * ⚡ LIMITES DE PAGINAÇÃO OTIMIZADOS:
+ * - Materiais: Sem limite (paginação automática por fetchAllRecords)
+ * - Orçamentos: Sem limite (paginação automática por fetchAllRecords)
+ * - Postes por orçamento: 500 (range otimizado)
+ * - Grupos por concessionária: 200 (range otimizado)
+ * - Grupos por poste: 2000 (500 postes x ~4 grupos média)
+ * 
+ * Esses limites foram ajustados para reduzir o volume de dados nas requisições
+ * sem comprometer a funcionalidade para casos de uso reais.
+ */
+
+/**
  * Função helper para buscar TODOS os registros de uma tabela usando paginação automática
  * @param tableName - Nome da tabela
  * @param selectQuery - Query de seleção (ex: '*' ou 'id, name, ...')
@@ -116,8 +128,6 @@ async function fetchAllRecords(
   let page = 0;
   const pageSize = 1000;
   let hasMore = true;
-
-  console.log(`🔄 Buscando todos os registros de "${tableName}"...`);
 
   while (hasMore) {
     const from = page * pageSize;
@@ -145,21 +155,13 @@ async function fetchAllRecords(
 
     if (data && data.length > 0) {
       allRecords = [...allRecords, ...data];
-      console.log(`📦 ${tableName} - Página ${page + 1}: ${data.length} registros (Total: ${allRecords.length})`);
-      
       hasMore = data.length === pageSize;
       page++;
     } else {
       hasMore = false;
     }
-
-    // Log do total no banco (apenas na primeira iteração)
-    if (page === 1 && count !== null) {
-      console.log(`📊 Total de registros em "${tableName}": ${count}`);
-    }
   }
 
-  console.log(`✅ Busca em "${tableName}" concluída: ${allRecords.length} registros carregados`);
   return allRecords;
 }
 
@@ -199,7 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
 
-  const fetchMaterials = async () => {
+  const fetchMaterials = useCallback(async () => {
     try {
       setLoadingMaterials(true);
 
@@ -223,12 +225,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!idsVistos.has(material.id)) {
           idsVistos.add(material.id);
           materiaisUnicos.push(material);
-        } else {
-          console.warn(`⚠️ Material duplicado detectado e ignorado: ID ${material.id} - ${material.descricao}`);
         }
       }
-
-      console.log(`📊 Total de materiais: ${allMaterials.length}, Únicos: ${materiaisUnicos.length}, Duplicatas removidas: ${allMaterials.length - materiaisUnicos.length}`);
 
       setMateriais(materiaisUnicos);
     } catch (error) {
@@ -238,7 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoadingMaterials(false);
     }
-  };
+  }, []);
 
   const addMaterial = async (material: Omit<Material, 'id'>) => {
     try {
@@ -425,9 +423,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Mapear os dados do banco para o formato do frontend
       const orcamentosFormatados: Orcamento[] = data.map(item => {
-        // Log para debugar status vindos do banco
-        console.log(`📋 Orçamento ${item.project_name}: status = "${item.status}" (tipo: ${typeof item.status})`);
-        
         // Normalizar o status para garantir compatibilidade
         let normalizedStatus: 'Em Andamento' | 'Finalizado' = 'Em Andamento';
         if (item.status === 'Finalizado' || item.status === 'finalized' || item.status === 'Concluído') {
@@ -667,9 +662,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           )
         `, { count: 'exact' })
         .eq('budget_id', budgetId)
-        .range(0, 10000); // Aumentar limite para 10.000 registros
-      
-      console.log(`📊 Total de postes no orçamento: ${postsCount}, postes carregados: ${originalPosts?.length || 0}`);
+        .range(0, 1000); // Limite de 1000 postes por orçamento (otimizado)
 
       if (postsError) {
         console.error('Erro ao buscar postes originais:', postsError);
@@ -1058,9 +1051,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         `, { count: 'exact' })
         .eq('budget_id', budgetId)
         .order('created_at', { ascending: true })
-        .range(0, 10000); // Aumentar limite para 10.000 registros
-      
-      console.log(`📊 Total de postes no orçamento ${budgetId}: ${postsCount}, postes carregados: ${postsData?.length || 0}`);
+        .range(0, 500); // Limite de 500 postes por orçamento (otimizado)
 
       if (postsError) {
         console.error('ERRO DETALHADO DO SUPABASE (posts):', postsError);
@@ -2014,7 +2005,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('budget_posts')
         .select('id')
         .eq('budget_id', budgetId)
-        .range(0, 10000); // Aumentar limite para 10.000 registros
+        .range(0, 500); // Limite de 500 postes por orçamento (otimizado)
 
       if (postsError) throw postsError;
       if (!posts || posts.length === 0) return;
@@ -2026,7 +2017,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .from('post_item_groups')
         .select('id')
         .in('budget_post_id', postIds)
-        .range(0, 10000); // Aumentar limite para 10.000 registros
+        .range(0, 2000); // Limite de 2000 grupos (500 postes x ~4 grupos média)
 
       if (!groupsError && postGroups && postGroups.length > 0) {
         const groupIds = postGroups.map(g => g.id);
@@ -2245,9 +2236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           )
         `, { count: 'exact' })
         .eq('company_id', companyId)
-        .range(0, 10000); // Aumentar limite para 10.000 registros
-      
-      console.log(`📊 Total de grupos de itens no banco: ${count}, grupos carregados: ${templatesData?.length || 0}`);
+        .range(0, 200); // Limite de 200 grupos por concessionária (otimizado)
 
       if (templatesError) {
         console.error('Erro ao buscar templates de grupos:', templatesError);

@@ -32,6 +32,7 @@ export function EditorGrupo() {
   const [saving, setSaving] = useState(false);
   const [sortField, setSortField] = useState<SortField>('descricao');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [inputStates, setInputStates] = useState<Record<string, string>>({});
   
   const alertDialog = useAlertDialog();
   
@@ -46,12 +47,14 @@ export function EditorGrupo() {
         materialId: m.materialId,
         quantidade: m.quantidade
       })));
+      setInputStates({});
     } else {
       // Modo criação - limpar campos
       setNomeGrupo('');
       setDescricao('');
       setConcessionariaId(utilityCompanies[0]?.id || '');
       setMateriaisGrupo([]);
+      setInputStates({});
     }
   }, [currentGroup, utilityCompanies]);
 
@@ -189,6 +192,39 @@ export function EditorGrupo() {
     ));
   };
 
+  const handleQuantidadeInputChange = (materialId: string, value: string) => {
+    // Atualizar o estado do input imediatamente para permitir edição livre
+    setInputStates(prev => ({ ...prev, [materialId]: value }));
+    
+    // Aceitar vírgula ou ponto como separador decimal
+    const normalizedValue = value.replace(',', '.');
+    const quantidade = parseFloat(normalizedValue);
+    
+    // Se o valor for válido e positivo, atualizar
+    if (!isNaN(quantidade) && quantidade > 0) {
+      handleQuantidadeChange(materialId, quantidade);
+    }
+  };
+
+  const handleQuantidadeBlur = (materialId: string, value: string) => {
+    // Ao sair do campo, validar e corrigir se necessário
+    const normalizedValue = value.replace(',', '.');
+    const quantidade = parseFloat(normalizedValue);
+    
+    if (isNaN(quantidade) || quantidade <= 0) {
+      // Se inválido, definir como 1
+      handleQuantidadeChange(materialId, 1);
+      setInputStates(prev => ({ ...prev, [materialId]: '1' }));
+    } else {
+      // Limpar o estado do input (usar o valor do state)
+      setInputStates(prev => {
+        const newState = { ...prev };
+        delete newState[materialId];
+        return newState;
+      });
+    }
+  };
+
   const handleSave = async () => {
     if (!nomeGrupo.trim()) {
       alertDialog.showError(
@@ -243,7 +279,6 @@ export function EditorGrupo() {
         currentGroup ? 'O grupo foi atualizado com sucesso.' : 'O grupo foi criado com sucesso.'
       );
     } catch (error) {
-      console.error('Erro ao salvar grupo:', error);
       alertDialog.showError(
         'Erro ao Salvar',
         'Erro ao salvar grupo. Tente novamente.'
@@ -477,23 +512,41 @@ export function EditorGrupo() {
                     
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => handleQuantidadeChange(materialId, quantidade - 1)}
+                        onClick={() => {
+                          const newQty = Math.max(1, quantidade - 1);
+                          handleQuantidadeChange(materialId, newQty);
+                          setInputStates(prev => {
+                            const newState = { ...prev };
+                            delete newState[materialId];
+                            return newState;
+                          });
+                        }}
                         className="p-1 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                        title="Diminuir 1"
                       >
                         <Minus className="h-4 w-4" />
                       </button>
                       
                       <input
-                        type="number"
-                        value={quantidade}
-                        onChange={(e) => handleQuantidadeChange(materialId, parseInt(e.target.value) || 0)}
-                        className="w-16 text-center px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        min="1"
+                        type="text"
+                        value={inputStates[materialId] ?? quantidade.toString().replace('.', ',')}
+                        onChange={(e) => handleQuantidadeInputChange(materialId, e.target.value)}
+                        onBlur={(e) => handleQuantidadeBlur(materialId, e.target.value)}
+                        className="w-20 text-center px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="1"
                       />
                       
                       <button
-                        onClick={() => handleQuantidadeChange(materialId, quantidade + 1)}
+                        onClick={() => {
+                          handleQuantidadeChange(materialId, quantidade + 1);
+                          setInputStates(prev => {
+                            const newState = { ...prev };
+                            delete newState[materialId];
+                            return newState;
+                          });
+                        }}
                         className="p-1 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                        title="Aumentar 1"
                       >
                         <Plus className="h-4 w-4" />
                       </button>
