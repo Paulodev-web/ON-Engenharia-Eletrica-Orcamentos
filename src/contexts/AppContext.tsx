@@ -1353,6 +1353,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Sincronizar dados após mutação - CRÍTICO para preços de postes atualizados
       console.log("🏗️ Tipo de poste atualizado, sincronizando preços...");
       await Promise.all([fetchPostTypes(), fetchMaterials()]);
+      
+      // Se há um orçamento aberto com detalhes carregados, recarregar para refletir mudanças
+      if (budgetDetails?.id) {
+        console.log("🔄 Recarregando orçamento atual para refletir mudanças no tipo de poste...");
+        await fetchBudgetDetails(budgetDetails.id);
+      }
     } catch (error) {
       console.error('Erro ao atualizar tipo de poste:', error);
       throw error;
