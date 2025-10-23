@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Calculator, Package, Edit2, Check, X, FileSpreadsheet, Download } from 'lucide-react';
+import { Calculator, Package, Edit2, Check, X, FileSpreadsheet, Download, Users } from 'lucide-react';
 import { BudgetPostDetail, BudgetDetails } from '../types';
 import { useApp } from '../contexts/AppContext';
-import { exportToExcel, exportToCSV, MaterialExport, ExportOptions } from '../services/exportService';
+import { exportToExcel, exportToCSV, exportToExcelForSuppliers, exportToCSVForSuppliers, MaterialExport, ExportOptions } from '../services/exportService';
 
 interface PainelConsolidadoProps {
   budgetDetails: BudgetDetails | null;
@@ -222,6 +222,70 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
     }
   };
 
+  const handleExportExcelForSuppliers = () => {
+    if (materiaisConsolidados.length === 0) {
+      alert('Não há materiais para exportar');
+      return;
+    }
+
+    const exportData: MaterialExport[] = materiaisConsolidados.map(material => ({
+      materialId: material.materialId,
+      codigo: material.codigo,
+      nome: material.nome,
+      unidade: material.unidade,
+      precoUnit: material.precoUnit,
+      quantidade: material.quantidade,
+      subtotal: material.subtotal,
+    }));
+
+    const exportOptions: ExportOptions = {
+      budgetName: orcamentoNome,
+      totalCost: custoTotal,
+      totalPosts: budgetDetails?.posts?.length || 0,
+      totalUniqueMaterials: materiaisConsolidados.length,
+      exportDate: new Date().toLocaleString('pt-BR'),
+    };
+
+    try {
+      exportToExcelForSuppliers(exportData, exportOptions);
+    } catch (error) {
+      console.error('Erro ao exportar para fornecedores (Excel):', error);
+      alert('Erro ao exportar arquivo Excel para fornecedores. Por favor, tente novamente.');
+    }
+  };
+
+  const handleExportCSVForSuppliers = () => {
+    if (materiaisConsolidados.length === 0) {
+      alert('Não há materiais para exportar');
+      return;
+    }
+
+    const exportData: MaterialExport[] = materiaisConsolidados.map(material => ({
+      materialId: material.materialId,
+      codigo: material.codigo,
+      nome: material.nome,
+      unidade: material.unidade,
+      precoUnit: material.precoUnit,
+      quantidade: material.quantidade,
+      subtotal: material.subtotal,
+    }));
+
+    const exportOptions: ExportOptions = {
+      budgetName: orcamentoNome,
+      totalCost: custoTotal,
+      totalPosts: budgetDetails?.posts?.length || 0,
+      totalUniqueMaterials: materiaisConsolidados.length,
+      exportDate: new Date().toLocaleString('pt-BR'),
+    };
+
+    try {
+      exportToCSVForSuppliers(exportData, exportOptions);
+    } catch (error) {
+      console.error('Erro ao exportar para fornecedores (CSV):', error);
+      alert('Erro ao exportar arquivo CSV para fornecedores. Por favor, tente novamente.');
+    }
+  };
+
   return (
     <div className="bg-gray-50 rounded-lg p-4 h-full flex flex-col">
       <div className="mb-4 flex-shrink-0">
@@ -237,22 +301,57 @@ export function PainelConsolidado({ budgetDetails, orcamentoNome }: PainelConsol
             {/* Botões de exportação */}
             {materiaisConsolidados.length > 0 && (
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleExportExcel}
-                  className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium shadow-sm"
-                  title="Exportar para Excel"
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <span>Excel</span>
-                </button>
-                <button
-                  onClick={handleExportCSV}
-                  className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
-                  title="Exportar para CSV"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>CSV</span>
-                </button>
+                {/* Exportação Completa (com preços) */}
+                <div className="flex flex-col space-y-1">
+                  <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide px-1">Completo</div>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={handleExportExcel}
+                      className="flex items-center space-x-1 px-2 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-xs font-medium shadow-sm"
+                      title="Exportar para Excel (com preços)"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      <span>Excel</span>
+                    </button>
+                    <button
+                      onClick={handleExportCSV}
+                      className="flex items-center space-x-1 px-2 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs font-medium shadow-sm"
+                      title="Exportar para CSV (com preços)"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Separador */}
+                <div className="h-12 w-px bg-gray-300"></div>
+
+                {/* Exportação para Fornecedores (sem preços) */}
+                <div className="flex flex-col space-y-1">
+                  <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide px-1 flex items-center space-x-1">
+                    <Users className="h-3 w-3" />
+                    <span>Fornecedores</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={handleExportExcelForSuppliers}
+                      className="flex items-center space-x-1 px-2 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-xs font-medium shadow-sm"
+                      title="Exportar para Fornecedores - Excel (sem preços)"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      <span>Excel</span>
+                    </button>
+                    <button
+                      onClick={handleExportCSVForSuppliers}
+                      className="flex items-center space-x-1 px-2 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-xs font-medium shadow-sm"
+                      title="Exportar para Fornecedores - CSV (sem preços)"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>CSV</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
             <div className="flex items-center space-x-1 text-xs text-gray-500">

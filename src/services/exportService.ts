@@ -171,3 +171,110 @@ const formatDateForFileName = (date: Date): string => {
   return `${year}${month}${day}_${hours}${minutes}${seconds}`;
 };
 
+/**
+ * Exporta os materiais consolidados para fornecedores em formato Excel (.xlsx)
+ * Não inclui preços, apenas código, nome, unidade e quantidade
+ */
+export const exportToExcelForSuppliers = (
+  materiais: MaterialExport[],
+  options: ExportOptions
+): void => {
+  // Criar planilha de materiais (SEM PREÇOS)
+  const materialsData = materiais.map(material => ({
+    'Código': material.codigo || '-',
+    'Material': material.nome,
+    'Unidade': material.unidade || '-',
+    'Quantidade Total': material.quantidade,
+  }));
+
+  // Criar informações do orçamento (SEM CUSTO)
+  const infoData = [
+    ['Orçamento', options.budgetName],
+    ['Data de Exportação', options.exportDate],
+    ['Total de Postes', options.totalPosts],
+    ['Materiais Únicos', options.totalUniqueMaterials],
+  ];
+
+  // Criar workbook
+  const workbook = XLSX.utils.book_new();
+
+  // Adicionar aba de materiais
+  const materialsWorksheet = XLSX.utils.json_to_sheet(materialsData);
+  
+  // Definir larguras das colunas
+  materialsWorksheet['!cols'] = [
+    { wch: 15 }, // Código
+    { wch: 50 }, // Material
+    { wch: 10 }, // Unidade
+    { wch: 15 }, // Quantidade
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, materialsWorksheet, 'Materiais');
+
+  // Adicionar aba de informações
+  const infoWorksheet = XLSX.utils.aoa_to_sheet(infoData);
+  infoWorksheet['!cols'] = [
+    { wch: 25 }, // Rótulo
+    { wch: 40 }, // Valor
+  ];
+  XLSX.utils.book_append_sheet(workbook, infoWorksheet, 'Informações');
+
+  // Gerar arquivo e fazer download
+  const fileName = `${sanitizeFileName(options.budgetName)}_fornecedores_${formatDateForFileName(new Date())}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+};
+
+/**
+ * Exporta os materiais consolidados para fornecedores em formato CSV
+ * Não inclui preços, apenas código, nome, unidade e quantidade
+ */
+export const exportToCSVForSuppliers = (
+  materiais: MaterialExport[],
+  options: ExportOptions
+): void => {
+  // Criar cabeçalhos (SEM PREÇOS)
+  const headers = [
+    'Código',
+    'Material',
+    'Unidade',
+    'Quantidade Total',
+  ];
+
+  // Criar linhas de dados
+  const rows = materiais.map(material => [
+    material.codigo || '-',
+    material.nome,
+    material.unidade || '-',
+    material.quantidade.toString(),
+  ]);
+
+  // Adicionar seção de informações (SEM CUSTO)
+  rows.push(['', '', '', '']);
+  rows.push(['Informações do Orçamento', '', '', '']);
+  rows.push(['Orçamento', options.budgetName, '', '']);
+  rows.push(['Data de Exportação', options.exportDate, '', '']);
+  rows.push(['Total de Postes', options.totalPosts.toString(), '', '']);
+  rows.push(['Materiais Únicos', options.totalUniqueMaterials.toString(), '', '']);
+
+  // Criar conteúdo CSV
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+  ].join('\n');
+
+  // Criar blob e fazer download
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  const fileName = `${sanitizeFileName(options.budgetName)}_fornecedores_${formatDateForFileName(new Date())}.csv`;
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', fileName);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
