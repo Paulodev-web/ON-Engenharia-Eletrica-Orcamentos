@@ -101,9 +101,10 @@ export function GerenciarTiposPostes() {
         showMessage('success', 'Tipo de poste adicionado com sucesso!');
       }
       handleCloseModal();
-    } catch (error) {
-      console.error('Erro ao salvar tipo de poste:', error);
-      showMessage('error', 'Erro ao salvar tipo de poste. Tente novamente.');
+    } catch (error: any) {
+      console.error('❌ Erro ao salvar tipo de poste:', error);
+      const errorMessage = error?.message || 'Erro desconhecido ao salvar tipo de poste';
+      showMessage('error', `Erro: ${errorMessage}`);
     } finally {
       setOperationLoading(false);
     }
@@ -268,6 +269,7 @@ export function GerenciarTiposPostes() {
       {showModal && (
         <PostTypeModal
           postType={editingPostType}
+          postTypes={postTypes}
           onClose={handleCloseModal}
           onSave={handleSavePostType}
           loading={operationLoading}
@@ -281,12 +283,13 @@ export function GerenciarTiposPostes() {
 
 interface PostTypeModalProps {
   postType: PostType | null;
+  postTypes: PostType[];
   onClose: () => void;
   onSave: (postType: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => Promise<void>;
   loading?: boolean;
 }
 
-function PostTypeModal({ postType, onClose, onSave, loading = false }: PostTypeModalProps) {
+function PostTypeModal({ postType, postTypes, onClose, onSave, loading = false }: PostTypeModalProps) {
   const [formData, setFormData] = useState({
     name: postType?.name || '',
     code: postType?.code || '',
@@ -310,6 +313,19 @@ function PostTypeModal({ postType, onClose, onSave, loading = false }: PostTypeM
     if (price <= 0) {
       alert('Por favor, informe um preço válido maior que zero.');
       return;
+    }
+
+    // Validar código duplicado
+    if (formData.code.trim()) {
+      const codeExists = postTypes.some(pt => 
+        pt.code?.toLowerCase() === formData.code.trim().toLowerCase() && 
+        pt.id !== postType?.id // Ignorar o próprio tipo de poste em caso de edição
+      );
+      
+      if (codeExists) {
+        alert(`O código "${formData.code.trim()}" já está sendo usado por outro tipo de poste. Por favor, escolha um código diferente.`);
+        return;
+      }
     }
 
     const submitData = {

@@ -1208,8 +1208,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (materialError) {
-        console.error('Erro ao criar material para tipo de poste:', materialError);
-        throw materialError;
+        console.error('❌ Erro ao criar material para tipo de poste:', {
+          message: materialError.message,
+          details: materialError.details,
+          hint: materialError.hint,
+          code: materialError.code
+        });
+        
+        // Verificar se é erro de código duplicado
+        if (materialError.code === '23505' && materialError.message?.includes('materials_code_key')) {
+          throw new Error(`O código "${data.code}" já está sendo usado por outro material/tipo de poste. Por favor, escolha um código diferente.`);
+        }
+        
+        throw new Error(`Erro ao criar material: ${materialError.message}`);
       }
 
       // Em seguida, criar o tipo de poste linkado ao material
@@ -1228,10 +1239,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (postTypeError) {
-        console.error('Erro ao adicionar tipo de poste:', postTypeError);
+        console.error('❌ Erro ao adicionar tipo de poste:', {
+          message: postTypeError.message,
+          details: postTypeError.details,
+          hint: postTypeError.hint,
+          code: postTypeError.code
+        });
+        
         // Se falhar ao criar post_type, deletar o material criado
         await supabase.from('materials').delete().eq('id', newMaterial.id);
-        throw postTypeError;
+        
+        // Verificar se é erro de código duplicado
+        if (postTypeError.code === '23505' && postTypeError.message?.includes('post_types_code_key')) {
+          throw new Error(`O código "${data.code}" já está sendo usado por outro tipo de poste. Por favor, escolha um código diferente.`);
+        }
+        
+        throw new Error(`Erro ao adicionar tipo de poste: ${postTypeError.message}`);
       }
 
       // Mapear dados do banco para o formato do frontend e adicionar ao estado
@@ -1259,8 +1282,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       // Sincronizar dados após mutação
       await fetchPostTypes();
-    } catch (error) {
-      console.error('Erro ao adicionar tipo de poste:', error);
+    } catch (error: any) {
+      console.error('❌ Erro ao adicionar tipo de poste (catch geral):', {
+        message: error?.message,
+        stack: error?.stack,
+        error: error
+      });
+      // Re-throw o erro para que o componente possa mostrá-lo ao usuário
       throw error;
     }
   };
@@ -1275,8 +1303,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (fetchError) {
-        console.error('Erro ao buscar tipo de poste:', fetchError);
-        throw fetchError;
+        console.error('❌ Erro ao buscar tipo de poste:', {
+          message: fetchError.message,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code
+        });
+        throw new Error(`Erro ao buscar tipo de poste: ${fetchError.message}`);
       }
 
       // Atualizar o material correspondente (se existir)
@@ -1292,8 +1325,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .eq('id', currentPostType.material_id);
 
         if (materialError) {
-          console.error('Erro ao atualizar material do tipo de poste:', materialError);
-          throw materialError;
+          console.error('❌ Erro ao atualizar material do tipo de poste:', {
+            message: materialError.message,
+            details: materialError.details,
+            hint: materialError.hint,
+            code: materialError.code
+          });
+          
+          // Verificar se é erro de código duplicado
+          if (materialError.code === '23505' && materialError.message?.includes('materials_code_key')) {
+            throw new Error(`O código "${data.code}" já está sendo usado por outro material/tipo de poste. Por favor, escolha um código diferente.`);
+          }
+          
+          throw new Error(`Erro ao atualizar material: ${materialError.message}`);
         }
       }
 
@@ -1313,8 +1357,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (postTypeError) {
-        console.error('Erro ao atualizar tipo de poste:', postTypeError);
-        throw postTypeError;
+        console.error('❌ Erro ao atualizar tipo de poste:', {
+          message: postTypeError.message,
+          details: postTypeError.details,
+          hint: postTypeError.hint,
+          code: postTypeError.code
+        });
+        
+        // Verificar se é erro de código duplicado
+        if (postTypeError.code === '23505' && postTypeError.message?.includes('post_types_code_key')) {
+          throw new Error(`O código "${data.code}" já está sendo usado por outro tipo de poste. Por favor, escolha um código diferente.`);
+        }
+        
+        throw new Error(`Erro ao atualizar tipo de poste: ${postTypeError.message}`);
       }
 
       // Mapear dados do banco para o formato do frontend e atualizar o estado
@@ -1359,8 +1414,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.log("🔄 Recarregando orçamento atual para refletir mudanças no tipo de poste...");
         await fetchBudgetDetails(budgetDetails.id);
       }
-    } catch (error) {
-      console.error('Erro ao atualizar tipo de poste:', error);
+    } catch (error: any) {
+      console.error('❌ Erro ao atualizar tipo de poste (catch geral):', {
+        message: error?.message,
+        stack: error?.stack,
+        error: error
+      });
+      // Re-throw o erro para que o componente possa mostrá-lo ao usuário
       throw error;
     }
   };
