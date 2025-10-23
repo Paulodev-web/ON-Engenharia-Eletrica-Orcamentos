@@ -1406,7 +1406,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addPostToBudget = async (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => {
+  const addPostToBudget = async (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; skipPostTypeMaterial?: boolean; }) => {
     try {
       console.log(`🔄 === SUPABASE INSERT INICIADO ===`);
       console.log(`📤 Dados sendo enviados para Supabase:`, newPostData);
@@ -1454,8 +1454,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.log(`✅ SUPABASE INSERT SUCESSO - dados retornados:`, data);
 
       // Primeiro, criar o material avulso no banco de dados (se existe material_id)
+      // IMPORTANTE: Só adicionar se skipPostTypeMaterial não estiver definido ou for false
       let looseMaterialData = null;
-      if (postTypeData.material_id) {
+      if (postTypeData.material_id && !newPostData.skipPostTypeMaterial) {
         console.log(`🔄 === ADICIONANDO MATERIAL AVULSO ===`);
         console.log(`📝 Post ID: ${data.id}`);
         console.log(`📝 Material ID: ${postTypeData.material_id}`);
@@ -1510,6 +1511,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } else {
           console.log(`ℹ️ Poste já existe como material avulso, pulando...`);
         }
+      } else if (newPostData.skipPostTypeMaterial) {
+        console.log(`ℹ️ skipPostTypeMaterial=true - não adicionando material do tipo de poste automaticamente`);
       } else {
         console.log(`⚠️ Post type não tem material_id - não será adicionado aos materiais avulsos`);
       }

@@ -146,17 +146,12 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
     });
     setSelectedGroups(groupTemplateIds);
     
-    // Copiar materiais avulsos (excluindo o material do tipo de poste)
-    const materials = sourcePost.post_materials
-      .filter(pm => {
-        // Filtrar o material que representa o próprio poste (se existir)
-        // Para evitar duplicação do material do tipo de poste
-        return true; // Por enquanto copiamos todos, mas pode ser ajustado se necessário
-      })
-      .map(pm => ({
-        materialId: pm.material_id,
-        quantity: pm.quantity
-      }));
+    // Copiar TODOS os materiais avulsos (incluindo o do tipo de poste)
+    // Porque quando há itens pré-selecionados, o sistema não adiciona o material do tipo de poste automaticamente
+    const materials = sourcePost.post_materials.map(pm => ({
+      materialId: pm.material_id,
+      quantity: pm.quantity
+    }));
     setSelectedMaterials(materials);
     
     alertDialog.showSuccess(

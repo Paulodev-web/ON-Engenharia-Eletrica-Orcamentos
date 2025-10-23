@@ -162,12 +162,15 @@ export function AreaTrabalho() {
     
     try {
       // Primeiro adicionar o poste e obter seu ID
+      // IMPORTANTE: skipPostTypeMaterial=true para não adicionar o material do tipo de poste automaticamente
+      // pois ele será adicionado manualmente junto com os outros materiais avulsos selecionados
       const newPostId = await addPostToBudget({
         budget_id: currentOrcamento.id,
         post_type_id: postTypeId,
         name: postName,
         x_coord: clickCoordinates.x,
         y_coord: clickCoordinates.y,
+        skipPostTypeMaterial: true, // Não adicionar automaticamente quando há itens pré-selecionados
       });
       
       // Aguardar um pouco para garantir que o estado foi atualizado
