@@ -6,6 +6,7 @@ import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../type
 import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, ChevronUp, ChevronDown, EyeOff } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
+import { EditPostModal } from './modals/EditPostModal';
 import { useAlertDialog } from '../hooks/useAlertDialog';
 import { AlertDialog } from './ui/alert-dialog';
 
@@ -59,6 +60,10 @@ export function AreaTrabalho() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clickCoordinates, setClickCoordinates] = useState<{ x: number, y: number } | null>(null);
   
+  // Estados para o modal de edição
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [postToEdit, setPostToEdit] = useState<any | null>(null);
+  
   // Efeito principal e unificado para carregar TODOS os dados da AreaTrabalho
   useEffect(() => {
     const budgetId = currentOrcamento?.id;
@@ -80,6 +85,12 @@ export function AreaTrabalho() {
   const handleRightClick = useCallback((coords: { x: number, y: number }) => {
     setClickCoordinates(coords);
     setIsModalOpen(true);
+  }, []);
+  
+  // Função para abrir o modal de edição
+  const handleEditPost = useCallback((post: any) => {
+    setPostToEdit(post);
+    setIsEditModalOpen(true);
   }, []);
   
   // Função para ser chamada pelo modal para adicionar o poste
@@ -503,6 +514,7 @@ export function AreaTrabalho() {
               selectedPostDetail={selectedPostDetail}
               onPosteClick={setSelectedPoste}
               onPostDetailClick={setSelectedPostDetail}
+              onEditPost={handleEditPost}
               onAddPoste={addPoste}
               onUpdatePoste={updatePoste}
               onUploadImage={() => fileInputRef.current?.click()}
@@ -559,6 +571,16 @@ export function AreaTrabalho() {
         coordinates={clickCoordinates}
         onSubmit={handleAddPost}
         onSubmitWithItems={handleAddPostWithItems}
+      />
+
+      {/* Modal para Editar Poste */}
+      <EditPostModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setPostToEdit(null);
+        }}
+        post={postToEdit}
       />
 
       {/* Alert Dialog */}

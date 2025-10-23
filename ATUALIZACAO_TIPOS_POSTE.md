@@ -74,3 +74,4 @@ No console do navegador, você verá mensagens como:
 
 Essas mensagens ajudam a verificar que a atualização automática está funcionando corretamente.
 
+

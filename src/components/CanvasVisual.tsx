@@ -21,6 +21,7 @@ interface CanvasVisualProps {
   selectedPostDetail?: BudgetPostDetail | null;
   onPosteClick: (poste: Poste) => void;
   onPostDetailClick?: (post: BudgetPostDetail) => void;
+  onEditPost?: (post: BudgetPostDetail) => void; // Nova prop para editar poste
   onAddPoste: (x: number, y: number, tipo: TipoPoste) => void;
   onUpdatePoste: (posteId: string, updates: Partial<Poste>) => void;
   onUploadImage: () => void;
@@ -37,6 +38,7 @@ export function CanvasVisual({
   selectedPostDetail,
   onPosteClick: _onPosteClick, 
   onPostDetailClick,
+  onEditPost,
   onAddPoste: _onAddPoste, 
   onUpdatePoste,
   onUploadImage,
@@ -491,6 +493,7 @@ export function CanvasVisual({
                           y={post.y_coord}  // USAR PIXELS DIRETOS
                           isSelected={selectedPostDetail?.id === post.id}
                           onClick={() => onPostDetailClick?.(post)}
+                          onLeftClick={() => onEditPost?.(post)}
                         />
                       ))}
                     </div>
@@ -607,6 +610,7 @@ export function CanvasVisual({
                             y={post.y_coord}
                             isSelected={selectedPostDetail?.id === post.id}
                             onClick={() => onPostDetailClick?.(post)}
+                            onLeftClick={() => onEditPost?.(post)}
                           />
                         ))}
                       </div>
@@ -665,6 +669,7 @@ export function CanvasVisual({
                           y={post.y_coord}
                           isSelected={selectedPostDetail?.id === post.id}
                           onClick={() => onPostDetailClick?.(post)}
+                          onLeftClick={() => onEditPost?.(post)}
                         />
                       ))}
                     </div>

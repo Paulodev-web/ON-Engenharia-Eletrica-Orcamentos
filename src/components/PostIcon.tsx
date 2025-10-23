@@ -10,6 +10,7 @@ interface PostIconProps {
   postType?: string;
   onClick?: () => void;
   onDoubleClick?: () => void;
+  onLeftClick?: () => void; // Nova prop para clique esquerdo (editar)
 }
 
 // Componente de ícone personalizado para poste elétrico
@@ -57,12 +58,22 @@ export function PostIcon({
   isCompleted = false,
   postType,
   onClick,
-  onDoubleClick
+  onDoubleClick,
+  onLeftClick
 }: PostIconProps) {
   // Tamanho fixo do ícone
   const ICON_SIZE = 32;
   
-  // LOG removido para evitar spam no console
+  // Handler para clique
+  const handleClick = (e: React.MouseEvent) => {
+    // Se tiver onLeftClick definido, usar ele para clique esquerdo normal
+    if (onLeftClick) {
+      onLeftClick();
+    } else if (onClick) {
+      // Fallback para onClick antigo (compatibilidade)
+      onClick();
+    }
+  };
   
   return (
     <div
@@ -75,7 +86,7 @@ export function PostIcon({
         width: `${ICON_SIZE}px`,
         height: `${ICON_SIZE}px`,
       }}
-      onClick={onClick}
+      onClick={handleClick}
       onDoubleClick={onDoubleClick}
     >
       {/* Ícone principal do poste */}
