@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Loader2, Search, Plus, Minus, Package, Folder, ArrowUpDown, ArrowUp, ArrowDown, Check } from 'lucide-react';
+import { X, Loader2, Search, Plus, Minus, Package, Folder, ArrowUpDown, ArrowUp, ArrowDown, Check, Trash2 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { useAlertDialog } from '../../hooks/useAlertDialog';
 import { AlertDialog } from '../ui/alert-dialog';
@@ -30,6 +30,7 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
     addLooseMaterialToPost,
     updateLooseMaterialQuantity,
     removeLooseMaterialFromPost,
+    deletePostFromBudget,
     fetchBudgetDetails
   } = useApp();
   
@@ -268,6 +269,39 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
     } finally {
       setEditingQuantities(prev => ({ ...prev, [postMaterialId]: false }));
     }
+  };
+
+  // Função para excluir o poste
+  const handleDeletePost = () => {
+    if (!currentPost) return;
+    
+    alertDialog.showConfirm(
+      'Excluir Poste',
+      `Tem certeza que deseja excluir o poste "${currentPost.name}"? Esta ação não pode ser desfeita e todos os grupos e materiais associados também serão removidos.`,
+      async () => {
+        try {
+          await deletePostFromBudget(currentPost.id);
+          
+          alertDialog.showSuccess(
+            'Poste Excluído',
+            'O poste foi excluído com sucesso.'
+          );
+          
+          // Fechar o modal após excluir
+          onClose();
+        } catch (error) {
+          alertDialog.showError(
+            'Erro ao Excluir',
+            'Não foi possível excluir o poste. Tente novamente.'
+          );
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Excluir Poste',
+        cancelText: 'Cancelar'
+      }
+    );
   };
 
   const handleSort = useCallback((field: SortField) => {
@@ -853,7 +887,16 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
 
         {/* Footer */}
         <div className="border-t p-6">
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            <button
+              onClick={handleDeletePost}
+              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors font-medium"
+              title="Excluir poste"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Excluir Poste</span>
+            </button>
+            
             <button
               onClick={onClose}
               className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"

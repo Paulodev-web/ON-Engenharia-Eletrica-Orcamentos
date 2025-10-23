@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, ErrorInfo } from 'react';
-import { X, Loader2, Search, Plus, Minus, Package, Folder, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { X, Loader2, Search, Plus, Minus, Package, Folder, ArrowUpDown, ArrowUp, ArrowDown, Copy } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { useAlertDialog } from '../../hooks/useAlertDialog';
 import { AlertDialog } from '../ui/alert-dialog';
@@ -60,7 +60,7 @@ interface AddPostModalProps {
   onSubmitWithItems?: (postTypeId: string, postName: string, selectedGroups: string[], selectedMaterials: {materialId: string, quantity: number}[]) => Promise<void>;
 }
 
-type TabType = 'post' | 'groups' | 'materials';
+type TabType = 'post' | 'groups' | 'materials' | 'duplicate';
 type SortField = 'descricao' | 'codigo' | 'precoUnit';
 type SortOrder = 'asc' | 'desc';
 
@@ -73,6 +73,7 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
     materiais,
     loadingMaterials,
     currentOrcamento,
+    budgetDetails,
     fetchItemGroups 
   } = useApp();
   
@@ -97,6 +98,9 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
   const [sortField, setSortField] = useState<SortField>('descricao');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [inputStates, setInputStates] = useState<Record<string, string>>({});
+  
+  // Estados para duplicação
+  const [selectedSourcePostId, setSelectedSourcePostId] = useState<string>('');
 
   // Resetar formulário quando modal abre/fecha
   useEffect(() => {
@@ -111,6 +115,7 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
         setMaterialSearchTerm('');
         setActiveTab('post');
         setInputStates({});
+        setSelectedSourcePostId('');
       }, 0);
       
       // Carregar grupos da concessionária atual
@@ -119,6 +124,46 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
       }
     }
   }, [isOpen, currentOrcamento, fetchItemGroups]);
+  
+  // Função para copiar configurações de outro poste
+  const handleDuplicateFromPost = useCallback((sourcePostId: string) => {
+    if (!budgetDetails || !sourcePostId) return;
+    
+    const sourcePost = budgetDetails.posts.find(p => p.id === sourcePostId);
+    if (!sourcePost) return;
+    
+    // Copiar tipo do poste
+    if (sourcePost.post_types?.id) {
+      setSelectedPostType(sourcePost.post_types.id);
+    }
+    
+    // Copiar grupos
+    const groupTemplateIds: string[] = [];
+    sourcePost.post_item_groups.forEach(group => {
+      if (group.template_id) {
+        groupTemplateIds.push(group.template_id);
+      }
+    });
+    setSelectedGroups(groupTemplateIds);
+    
+    // Copiar materiais avulsos (excluindo o material do tipo de poste)
+    const materials = sourcePost.post_materials
+      .filter(pm => {
+        // Filtrar o material que representa o próprio poste (se existir)
+        // Para evitar duplicação do material do tipo de poste
+        return true; // Por enquanto copiamos todos, mas pode ser ajustado se necessário
+      })
+      .map(pm => ({
+        materialId: pm.material_id,
+        quantity: pm.quantity
+      }));
+    setSelectedMaterials(materials);
+    
+    alertDialog.showSuccess(
+      'Configurações Copiadas',
+      `Tipo de poste, grupos e materiais do poste "${sourcePost.name}" foram copiados com sucesso!`
+    );
+  }, [budgetDetails, alertDialog]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -436,6 +481,17 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
               <span>Dados do Poste</span>
             </button>
             <button
+              onClick={() => setActiveTab('duplicate')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'duplicate'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Copy className="h-4 w-4" />
+              <span>Duplicar de Existente</span>
+            </button>
+            <button
               onClick={() => setActiveTab('groups')}
               className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeTab === 'groups'
@@ -503,22 +559,160 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
                         <span className="text-gray-500">Carregando tipos...</span>
                       </div>
                     ) : (
-                      <select
-                        id="postType"
-                        value={selectedPostType}
-                        onChange={(e) => setSelectedPostType(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                        disabled={isSubmitting}
-                      >
-                        <option value="">Selecione um tipo de poste</option>
-                        {postTypes.map((postType) => (
-                          <option key={postType.id} value={postType.id}>
-                            {postType.name} {postType.code && `(${postType.code})`} - R$ {postType.price.toFixed(2)}
-                            {postType.height_m && ` - ${postType.height_m}m`}
-                          </option>
-                        ))}
-                      </select>
+                      <>
+                        <select
+                          id="postType"
+                          value={selectedPostType}
+                          onChange={(e) => setSelectedPostType(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          required
+                          disabled={isSubmitting}
+                        >
+                          <option value="">Selecione um tipo de poste</option>
+                          {postTypes.map((postType) => (
+                            <option key={postType.id} value={postType.id}>
+                              {postType.name} {postType.code && `(${postType.code})`} - R$ {postType.price.toFixed(2)}
+                              {postType.height_m && ` - ${postType.height_m}m`}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedPostType && selectedSourcePostId && (
+                          <p className="mt-2 text-sm text-green-600 flex items-center">
+                            <Copy className="h-4 w-4 mr-1" />
+                            Tipo de poste copiado do poste selecionado
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  
+                  {(selectedGroups.length > 0 || selectedMaterials.length > 0) && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-green-900 mb-2">Itens Copiados</h4>
+                      <div className="text-sm text-green-700 space-y-1">
+                        {selectedGroups.length > 0 && (
+                          <p>✓ {selectedGroups.length} grupo(s) de itens</p>
+                        )}
+                        {selectedMaterials.length > 0 && (
+                          <p>✓ {selectedMaterials.length} material(is) avulso(s)</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Aba Duplicar de Existente */}
+              {activeTab === 'duplicate' && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-blue-900 mb-2 flex items-center">
+                      <Copy className="h-5 w-5 mr-2" />
+                      Copiar Configurações de Outro Poste
+                    </h4>
+                    <p className="text-sm text-blue-700 mb-4">
+                      Selecione um poste existente para copiar todos os grupos de itens e materiais avulsos para o novo poste.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="sourcePost" className="block text-sm font-medium text-gray-700 mb-2">
+                      Selecionar Poste Origem
+                    </label>
+                    {!budgetDetails || budgetDetails.posts.length === 0 ? (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-gray-500">Nenhum poste disponível para copiar</p>
+                        <p className="text-sm text-gray-400 mt-1">Adicione postes primeiro ou configure manualmente</p>
+                      </div>
+                    ) : (
+                      <>
+                        <select
+                          id="sourcePost"
+                          value={selectedSourcePostId}
+                          onChange={(e) => setSelectedSourcePostId(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3"
+                        >
+                          <option value="">Selecione um poste...</option>
+                          {budgetDetails.posts.map((post) => (
+                            <option key={post.id} value={post.id}>
+                              {post.name} - {post.post_types?.name || 'Sem tipo'}
+                              {' '}({post.post_item_groups.length} grupos, {post.post_materials.length} materiais)
+                            </option>
+                          ))}
+                        </select>
+
+                        {selectedSourcePostId && (
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateFromPost(selectedSourcePostId)}
+                            className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                          >
+                            <Copy className="h-4 w-4" />
+                            <span>Copiar Configurações</span>
+                          </button>
+                        )}
+
+                        {/* Preview do poste selecionado */}
+                        {selectedSourcePostId && (() => {
+                          const sourcePost = budgetDetails.posts.find(p => p.id === selectedSourcePostId);
+                          if (!sourcePost) return null;
+                          
+                          return (
+                            <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                              <h5 className="font-medium text-gray-900 mb-3">Configurações que serão copiadas:</h5>
+                              
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-700">Poste de Origem: {sourcePost.name}</p>
+                                  <p className="text-sm text-green-600 font-medium flex items-center mt-1">
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    Tipo: {sourcePost.post_types?.name || 'Não definido'}
+                                    {sourcePost.post_types?.code && ` (${sourcePost.post_types.code})`}
+                                  </p>
+                                </div>
+
+                                {sourcePost.post_item_groups.length > 0 && (
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-700 mb-1 flex items-center">
+                                      <Copy className="h-3 w-3 mr-1 text-green-600" />
+                                      Grupos ({sourcePost.post_item_groups.length}):
+                                    </p>
+                                    <ul className="list-disc list-inside text-sm text-gray-600 space-y-1 ml-4">
+                                      {sourcePost.post_item_groups.map(group => (
+                                        <li key={group.id}>
+                                          {group.name} - {group.post_item_group_materials?.length || 0} materiais
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {sourcePost.post_materials.length > 0 && (
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-700 mb-1 flex items-center">
+                                      <Copy className="h-3 w-3 mr-1 text-green-600" />
+                                      Materiais Avulsos ({sourcePost.post_materials.length}):
+                                    </p>
+                                    <ul className="list-disc list-inside text-sm text-gray-600 space-y-1 ml-4">
+                                      {sourcePost.post_materials.map(material => (
+                                        <li key={material.id}>
+                                          {material.materials?.name || 'Material'} - Qtd: {material.quantity}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {sourcePost.post_item_groups.length === 0 && sourcePost.post_materials.length === 0 && (
+                                  <p className="text-sm text-gray-500 italic">
+                                    Este poste possui apenas o tipo configurado (sem grupos ou materiais adicionais).
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </>
                     )}
                   </div>
                 </div>
