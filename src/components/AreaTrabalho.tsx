@@ -57,6 +57,9 @@ export function AreaTrabalho() {
   // Estado para controlar se a planta está retraída
   const [isPlantCollapsed, setIsPlantCollapsed] = useState(false);
   
+  // Estado para detectar se é desktop/PC
+  const [isDesktop, setIsDesktop] = useState(false);
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clickCoordinates, setClickCoordinates] = useState<{ x: number, y: number } | null>(null);
   
@@ -64,6 +67,21 @@ export function AreaTrabalho() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [postToEdit, setPostToEdit] = useState<any | null>(null);
   
+  // Efeito para detectar se é desktop/PC
+  useEffect(() => {
+    const checkIsDesktop = () => {
+      // Detecta se é desktop baseado na largura da tela e user agent
+      const isDesktopScreen = window.innerWidth >= 1024;
+      const isDesktopUserAgent = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsDesktop(isDesktopScreen && isDesktopUserAgent);
+    };
+
+    checkIsDesktop();
+    window.addEventListener('resize', checkIsDesktop);
+    
+    return () => window.removeEventListener('resize', checkIsDesktop);
+  }, []);
+
   // Efeito principal e unificado para carregar TODOS os dados da AreaTrabalho
   useEffect(() => {
     const budgetId = currentOrcamento?.id;
@@ -478,7 +496,7 @@ export function AreaTrabalho() {
 
       {/* Canvas - Seção Superior */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden transition-all duration-300 ease-in-out" 
-           style={{height: isPlantCollapsed ? '60px' : '400px'}}>
+           style={{height: isPlantCollapsed ? '60px' : (isDesktop ? '500px' : '400px')}}>
         {/* Cabeçalho da Planta com botão de retrair */}
         <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center space-x-2">
