@@ -19,6 +19,13 @@ export interface ExportOptions {
 }
 
 /**
+ * Formata número para padrão brasileiro (vírgula como separador decimal)
+ */
+const formatarNumero = (numero: number, casasDecimais: number = 2): string => {
+  return numero.toFixed(casasDecimais).replace('.', ',');
+};
+
+/**
  * Exporta os materiais consolidados para formato Excel (.xlsx)
  */
 export const exportToExcel = (
@@ -30,9 +37,9 @@ export const exportToExcel = (
     'Código': material.codigo || '-',
     'Material': material.nome,
     'Unidade': material.unidade || '-',
-    'Quantidade Total': material.quantidade,
-    'Preço Unitário (R$)': material.precoUnit.toFixed(2),
-    'Subtotal (R$)': material.subtotal.toFixed(2),
+    'Quantidade Total': formatarNumero(material.quantidade),
+    'Preço Unitário (R$)': formatarNumero(material.precoUnit),
+    'Subtotal (R$)': formatarNumero(material.subtotal),
   }));
 
   // Adicionar linha de total
@@ -42,7 +49,7 @@ export const exportToExcel = (
     'Unidade': '',
     'Quantidade Total': '',
     'Preço Unitário (R$)': '',
-    'Subtotal (R$)': options.totalCost.toFixed(2),
+    'Subtotal (R$)': formatarNumero(options.totalCost),
   } as any);
 
   // Criar informações do orçamento
@@ -51,7 +58,7 @@ export const exportToExcel = (
     ['Data de Exportação', options.exportDate],
     ['Total de Postes', options.totalPosts],
     ['Materiais Únicos', options.totalUniqueMaterials],
-    ['Custo Total', `R$ ${options.totalCost.toFixed(2)}`],
+    ['Custo Total', `R$ ${formatarNumero(options.totalCost)}`],
   ];
 
   // Criar workbook
@@ -107,14 +114,14 @@ export const exportToCSV = (
     material.codigo || '-',
     material.nome,
     material.unidade || '-',
-    material.quantidade.toString(),
-    material.precoUnit.toFixed(2),
-    material.subtotal.toFixed(2),
+    formatarNumero(material.quantidade),
+    formatarNumero(material.precoUnit),
+    formatarNumero(material.subtotal),
   ]);
 
   // Adicionar linha vazia e linha de total
   rows.push(['', '', '', '', '', '']);
-  rows.push(['', 'TOTAL', '', '', '', options.totalCost.toFixed(2)]);
+  rows.push(['', 'TOTAL', '', '', '', formatarNumero(options.totalCost)]);
 
   // Adicionar seção de informações
   rows.push(['', '', '', '', '', '']);
@@ -123,7 +130,7 @@ export const exportToCSV = (
   rows.push(['Data de Exportação', options.exportDate, '', '', '', '']);
   rows.push(['Total de Postes', options.totalPosts.toString(), '', '', '', '']);
   rows.push(['Materiais Únicos', options.totalUniqueMaterials.toString(), '', '', '', '']);
-  rows.push(['Custo Total', `R$ ${options.totalCost.toFixed(2)}`, '', '', '', '']);
+  rows.push(['Custo Total', `R$ ${formatarNumero(options.totalCost)}`, '', '', '', '']);
 
   // Criar conteúdo CSV
   const csvContent = [
@@ -184,7 +191,7 @@ export const exportToExcelForSuppliers = (
     'Código': material.codigo || '-',
     'Material': material.nome,
     'Unidade': material.unidade || '-',
-    'Quantidade Total': material.quantidade,
+    'Quantidade Total': formatarNumero(material.quantidade),
   }));
 
   // Criar informações do orçamento (SEM CUSTO)
@@ -245,7 +252,7 @@ export const exportToCSVForSuppliers = (
     material.codigo || '-',
     material.nome,
     material.unidade || '-',
-    material.quantidade.toString(),
+    formatarNumero(material.quantidade),
   ]);
 
   // Adicionar seção de informações (SEM CUSTO)
