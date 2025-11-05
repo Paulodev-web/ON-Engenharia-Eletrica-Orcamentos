@@ -2372,50 +2372,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addGroup = async (groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => {
+  const addGroup = async (groupData: { name: string; description?: string; company_id?: string; company_ids?: string[]; materials: { material_id: string; quantity: number }[] }) => {
     try {
-
+      // Determinar quais concessionárias serão usadas
+      // Suporta tanto company_id (modo antigo) quanto company_ids (modo novo)
+      const companyIds = groupData.company_ids || (groupData.company_id ? [groupData.company_id] : []);
       
-      // Primeiro criar o registro principal na tabela item_group_templates
-      const { data: groupTemplate, error: groupError } = await supabase
-        .from('item_group_templates')
-        .insert({
-          name: groupData.name,
-          description: groupData.description || null,
-          company_id: groupData.company_id,
-        })
-        .select()
-        .single();
-
-      if (groupError) {
-        console.error('Erro ao criar template do grupo:', groupError);
-        throw groupError;
+      if (companyIds.length === 0) {
+        throw new Error('Nenhuma concessionária especificada');
       }
 
+      const createdGroupIds: string[] = [];
+      const companyIdsToRefresh = new Set<string>();
 
+      // Criar um grupo independente para cada concessionária
+      for (const companyId of companyIds) {
+        // Criar o registro principal na tabela item_group_templates
+        const { data: groupTemplate, error: groupError } = await supabase
+          .from('item_group_templates')
+          .insert({
+            name: groupData.name,
+            description: groupData.description || null,
+            company_id: companyId,
+          })
+          .select()
+          .single();
 
-      // Inserir materiais do grupo na tabela template_materials
-      if (groupData.materials.length > 0) {
-        const materialsData = groupData.materials.map(material => ({
-          template_id: groupTemplate.id,
-          material_id: material.material_id,
-          quantity: material.quantity,
-        }));
-
-        const { error: materialsError } = await supabase
-          .from('template_materials')
-          .insert(materialsData);
-
-        if (materialsError) {
-          console.error('Erro ao adicionar materiais do grupo:', materialsError);
-          throw materialsError;
+        if (groupError) {
+          console.error('Erro ao criar template do grupo:', groupError);
+          throw groupError;
         }
 
+        createdGroupIds.push(groupTemplate.id);
+        companyIdsToRefresh.add(companyId);
 
+        // Inserir materiais do grupo na tabela template_materials
+        if (groupData.materials.length > 0) {
+          const materialsData = groupData.materials.map(material => ({
+            template_id: groupTemplate.id,
+            material_id: material.material_id,
+            quantity: material.quantity,
+          }));
+
+          const { error: materialsError } = await supabase
+            .from('template_materials')
+            .insert(materialsData);
+
+          if (materialsError) {
+            console.error('Erro ao adicionar materiais do grupo:', materialsError);
+            throw materialsError;
+          }
+        }
       }
 
-      // Atualizar a UI com os dados atualizados
-      await fetchItemGroups(groupData.company_id);
+      // Atualizar a UI com os dados atualizados para todas as concessionárias afetadas
+      // Se houver múltiplas, atualizar todas. Se houver apenas uma, atualizar apenas ela.
+      for (const companyId of companyIdsToRefresh) {
+        await fetchItemGroups(companyId);
+      }
     } catch (error) {
       console.error('Erro ao adicionar grupo:', error);
       throw error;

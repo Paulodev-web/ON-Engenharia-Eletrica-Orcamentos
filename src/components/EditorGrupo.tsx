@@ -27,7 +27,7 @@ export function EditorGrupo() {
   const [searchTerm, setSearchTerm] = useState('');
   const [nomeGrupo, setNomeGrupo] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [concessionariaId, setConcessionariaId] = useState('');
+  const [selectedConcessionarias, setSelectedConcessionarias] = useState<string[]>([]);
   const [materiaisGrupo, setMateriaisGrupo] = useState<MaterialGrupo[]>([]);
   const [saving, setSaving] = useState(false);
   const [sortField, setSortField] = useState<SortField>('descricao');
@@ -39,10 +39,10 @@ export function EditorGrupo() {
   // Inicializar campos quando o componente monta ou grupo muda
   useEffect(() => {
     if (currentGroup) {
-      // Modo edição - preencher campos com dados do grupo
+      // Modo edição - preencher campos com dados do grupo (apenas uma concessionária)
       setNomeGrupo(currentGroup.nome);
       setDescricao(currentGroup.descricao || '');
-      setConcessionariaId(currentGroup.concessionariaId);
+      setSelectedConcessionarias([currentGroup.concessionariaId]);
       setMateriaisGrupo(currentGroup.materiais.map(m => ({
         materialId: m.materialId,
         quantidade: m.quantidade
@@ -52,7 +52,7 @@ export function EditorGrupo() {
       // Modo criação - limpar campos
       setNomeGrupo('');
       setDescricao('');
-      setConcessionariaId(utilityCompanies[0]?.id || '');
+      setSelectedConcessionarias([]);
       setMateriaisGrupo([]);
       setInputStates({});
     }
@@ -242,10 +242,10 @@ export function EditorGrupo() {
       return;
     }
 
-    if (!concessionariaId) {
+    if (selectedConcessionarias.length === 0) {
       alertDialog.showError(
         'Campo Obrigatório',
-        'Por favor, selecione uma concessionária.'
+        'Por favor, selecione pelo menos uma concessionária.'
       );
       return;
     }
@@ -253,31 +253,74 @@ export function EditorGrupo() {
     try {
       setSaving(true);
 
-      const groupData = {
-        name: nomeGrupo.trim(),
-        description: descricao.trim() || undefined,
-        company_id: concessionariaId,
-        materials: materiaisGrupo.map(mg => ({ 
-          material_id: mg.materialId, 
-          quantity: mg.quantidade 
-        }))
-      };
+      const materialsData = materiaisGrupo.map(mg => ({ 
+        material_id: mg.materialId, 
+        quantity: mg.quantidade 
+      }));
 
       if (currentGroup) {
-        // Modo edição
+        // Modo edição - atualizar o grupo atual e criar cópias para outras concessionárias
+        const currentCompanyId = currentGroup.concessionariaId;
+        
+        // Atualizar o grupo atual
+        const groupData = {
+          name: nomeGrupo.trim(),
+          description: descricao.trim() || undefined,
+          company_id: currentCompanyId,
+          materials: materialsData
+        };
         await updateGroup(currentGroup.id, groupData);
+        
+        // Identificar concessionárias adicionais selecionadas (que não são a atual)
+        const additionalCompanyIds = selectedConcessionarias.filter(
+          id => id !== currentCompanyId
+        );
+        
+        // Criar cópias do grupo para as outras concessionárias selecionadas
+        if (additionalCompanyIds.length > 0) {
+          await addGroup({
+            name: nomeGrupo.trim(),
+            description: descricao.trim() || undefined,
+            company_ids: additionalCompanyIds,
+            materials: materialsData
+          });
+        }
+        
+        // Limpar estado do grupo atual e voltar à tela de grupos
+        setCurrentGroup(null);
+        setCurrentView('grupos');
+        
+        let message = 'O grupo foi atualizado com sucesso.';
+        if (additionalCompanyIds.length > 0) {
+          message += ` ${additionalCompanyIds.length} cópia(s) ${additionalCompanyIds.length > 1 ? 'foram criadas' : 'foi criada'} para ${additionalCompanyIds.length > 1 ? 'outras concessionárias' : 'outra concessionária'} selecionada${additionalCompanyIds.length > 1 ? 's' : ''}.`;
+        }
+        
+        alertDialog.showSuccess(
+          'Grupo Atualizado',
+          message
+        );
       } else {
-        // Modo criação
-        await addGroup(groupData);
+        // Modo criação - criar grupos independentes para cada concessionária
+        await addGroup({
+          name: nomeGrupo.trim(),
+          description: descricao.trim() || undefined,
+          company_ids: selectedConcessionarias,
+          materials: materialsData
+        });
+        
+        // Limpar estado do grupo atual e voltar à tela de grupos
+        setCurrentGroup(null);
+        setCurrentView('grupos');
+        
+        const message = selectedConcessionarias.length > 1
+          ? `${selectedConcessionarias.length} grupos foram criados com sucesso (um para cada concessionária selecionada).`
+          : 'O grupo foi criado com sucesso.';
+        
+        alertDialog.showSuccess(
+          'Grupo(s) Criado(s)',
+          message
+        );
       }
-
-      // Limpar estado do grupo atual e voltar à tela de grupos
-      setCurrentGroup(null);
-      setCurrentView('grupos');
-      alertDialog.showSuccess(
-        currentGroup ? 'Grupo Atualizado' : 'Grupo Criado',
-        currentGroup ? 'O grupo foi atualizado com sucesso.' : 'O grupo foi criado com sucesso.'
-      );
     } catch (error) {
       alertDialog.showError(
         'Erro ao Salvar',
@@ -455,23 +498,73 @@ export function EditorGrupo() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Concessionária *
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Concessionária(s) *
             </label>
-            <select
-              value={concessionariaId}
-              onChange={(e) => setConcessionariaId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-              disabled={saving}
-            >
-              <option value="">Selecione uma concessionária</option>
-              {utilityCompanies.map((concessionaria) => (
-                <option key={concessionaria.id} value={concessionaria.id}>
-                  {concessionaria.nome}
-                </option>
-              ))}
-            </select>
+            <div className="border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto">
+              {utilityCompanies.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhuma concessionária disponível</p>
+              ) : (
+                <div className="space-y-2">
+                  {utilityCompanies.map((concessionaria) => {
+                    const isCurrentGroupCompany = currentGroup && concessionaria.id === currentGroup.concessionariaId;
+                    return (
+                      <label
+                        key={concessionaria.id}
+                        className={`flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded ${
+                          isCurrentGroupCompany ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedConcessionarias.includes(concessionaria.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedConcessionarias([...selectedConcessionarias, concessionaria.id]);
+                            } else {
+                              // Não permitir desmarcar a concessionária atual do grupo em edição
+                              if (isCurrentGroupCompany) {
+                                alertDialog.showError(
+                                  'Não Permitido',
+                                  'Não é possível remover a concessionária atual do grupo. Selecione outras concessionárias para criar cópias.'
+                                );
+                                return;
+                              }
+                              setSelectedConcessionarias(selectedConcessionarias.filter(id => id !== concessionaria.id));
+                            }
+                          }}
+                          disabled={saving}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">
+                          {concessionaria.nome}
+                          {isCurrentGroupCompany && (
+                            <span className="ml-2 text-xs text-blue-600 font-medium">(atual)</span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {selectedConcessionarias.length > 0 && (
+              <p className="mt-2 text-xs text-gray-500">
+                {currentGroup ? (
+                  <>
+                    {selectedConcessionarias.length === 1 
+                      ? 'O grupo será atualizado na concessionária atual.'
+                      : `O grupo será atualizado na concessionária atual e ${selectedConcessionarias.length - 1} cópia(s) ${selectedConcessionarias.length - 1 > 1 ? 'serão criadas' : 'será criada'} para ${selectedConcessionarias.length - 1 > 1 ? 'outras concessionárias' : 'outra concessionária'} selecionada${selectedConcessionarias.length - 1 > 1 ? 's' : ''}.`
+                    }
+                  </>
+                ) : (
+                  <>
+                    {selectedConcessionarias.length} concessionária{selectedConcessionarias.length > 1 ? 's' : ''} selecionada{selectedConcessionarias.length > 1 ? 's' : ''}. 
+                    {selectedConcessionarias.length > 1 && ' Serão criados grupos independentes para cada uma.'}
+                  </>
+                )}
+              </p>
+            )}
           </div>
         </div>
 
