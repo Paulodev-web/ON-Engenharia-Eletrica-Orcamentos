@@ -1,3 +1,4 @@
+import React from 'react';
 import { CheckCircle } from 'lucide-react';
 
 interface PostIconProps {
@@ -11,6 +12,10 @@ interface PostIconProps {
   onClick?: () => void;
   onDoubleClick?: () => void;
   onLeftClick?: () => void; // Nova prop para clique esquerdo (editar)
+  onDragStart?: (e: React.MouseEvent) => void;
+  onDrag?: (e: React.MouseEvent) => void;
+  onDragEnd?: (e: React.MouseEvent) => void;
+  isDragging?: boolean; // Nova prop para indicar se está sendo arrastado
 }
 
 // Componente de ícone personalizado para poste elétrico
@@ -59,13 +64,26 @@ export function PostIcon({
   postType,
   onClick,
   onDoubleClick,
-  onLeftClick
+  onLeftClick,
+  onDragStart,
+  onDrag,
+  onDragEnd,
+  isDragging: isDraggingProp = false
 }: PostIconProps) {
+  const [isLocalDragging, setIsLocalDragging] = React.useState(false);
+  const [dragStartPos, setDragStartPos] = React.useState({ x: 0, y: 0 });
+  
   // Tamanho fixo do ícone
   const ICON_SIZE = 32;
   
   // Handler para clique
   const handleClick = (e: React.MouseEvent) => {
+    // Não executar o clique se estava arrastando
+    if (isLocalDragging) {
+      setIsLocalDragging(false);
+      return;
+    }
+    
     // Se tiver onLeftClick definido, usar ele para clique esquerdo normal
     if (onLeftClick) {
       onLeftClick();
@@ -74,12 +92,39 @@ export function PostIcon({
       onClick();
     }
   };
+
+  // Handler para mousedown - inicia o drag
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDragStartPos({ x: e.clientX, y: e.clientY });
+    setIsLocalDragging(false);
+    
+    if (onDragStart) {
+      onDragStart(e);
+    }
+  };
+
+  // Handler para mouse move - detecta se está arrastando
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (e.buttons === 1) { // Botão esquerdo pressionado
+      const deltaX = Math.abs(e.clientX - dragStartPos.x);
+      const deltaY = Math.abs(e.clientY - dragStartPos.y);
+      
+      // Se moveu mais de 3 pixels, considera como drag
+      if (deltaX > 3 || deltaY > 3) {
+        setIsLocalDragging(true);
+      }
+    }
+  };
+  
+  // Determinar se está sendo arrastado (local ou prop)
+  const isBeingDragged = isDraggingProp || isLocalDragging;
   
   return (
     <div
-      className={`absolute cursor-pointer transition-all duration-200 z-50 ${
+      className={`absolute cursor-move z-50 ${
         isSelected ? 'scale-125' : 'hover:scale-110'
-      }`}
+      } ${!isBeingDragged ? 'transition-all duration-200' : ''}`}
       style={{
         left: `${x - (ICON_SIZE / 2)}px`,
         top: `${y - (ICON_SIZE / 2)}px`,
@@ -88,6 +133,8 @@ export function PostIcon({
       }}
       onClick={handleClick}
       onDoubleClick={onDoubleClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
     >
       {/* Ícone principal do poste */}
       <div className={`relative w-8 h-8 rounded-full transition-colors flex items-center justify-center ${

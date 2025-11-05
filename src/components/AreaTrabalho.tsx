@@ -21,6 +21,7 @@ export function AreaTrabalho() {
     fetchPostTypes,
     addPostToBudget,
     deletePostFromBudget,
+    updatePostCoordinates,
     uploadPlanImage,
     deletePlanImage,
     loadingUpload,
@@ -538,6 +539,7 @@ export function AreaTrabalho() {
               onEditPost={handleEditPost}
               onAddPoste={addPoste}
               onUpdatePoste={updatePoste}
+              onUpdatePostCoordinates={updatePostCoordinates}
               onUploadImage={() => fileInputRef.current?.click()}
               onDeleteImage={handleDeleteImage}
               onDeletePoste={handleDeletePoste}

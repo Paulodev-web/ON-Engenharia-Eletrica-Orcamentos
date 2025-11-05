@@ -60,6 +60,7 @@ interface AppContextType {
   addPostToBudget: (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => Promise<string>;
   addGroupToPost: (groupId: string, postId: string) => Promise<void>;
   deletePostFromBudget: (postId: string) => Promise<void>;
+  updatePostCoordinates: (postId: string, x: number, y: number) => Promise<void>;
   removeGroupFromPost: (postGroupId: string) => Promise<void>;
   updateMaterialQuantityInPostGroup: (postGroupId: string, materialId: string, newQuantity: number) => Promise<void>;
   
@@ -1811,6 +1812,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updatePostCoordinates = async (postId: string, x: number, y: number) => {
+    try {
+      console.log(`🔄 Atualizando coordenadas do poste ${postId}: x=${x}, y=${y}`);
+
+      const { error } = await supabase
+        .from('budget_posts')
+        .update({
+          x_coord: x,
+          y_coord: y
+        })
+        .eq('id', postId);
+
+      if (error) {
+        console.error('Erro ao atualizar coordenadas do poste:', error);
+        throw error;
+      }
+
+      console.log(`✅ Coordenadas atualizadas com sucesso`);
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          posts: prev.posts.map(post => 
+            post.id === postId ? { ...post, x_coord: x, y_coord: y } : post
+          )
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar coordenadas do poste:', error);
+      throw error;
+    }
+  };
+
   const removeGroupFromPost = async (postGroupId: string) => {
     try {
 
@@ -2587,6 +2623,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPostToBudget,
       addGroupToPost,
       deletePostFromBudget,
+      updatePostCoordinates,
       removeGroupFromPost,
       updateMaterialQuantityInPostGroup,
       

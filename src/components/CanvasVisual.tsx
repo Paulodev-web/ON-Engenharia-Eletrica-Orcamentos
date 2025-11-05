@@ -24,6 +24,7 @@ interface CanvasVisualProps {
   onEditPost?: (post: BudgetPostDetail) => void; // Nova prop para editar poste
   onAddPoste: (x: number, y: number, tipo: TipoPoste) => void;
   onUpdatePoste: (posteId: string, updates: Partial<Poste>) => void;
+  onUpdatePostCoordinates?: (postId: string, x: number, y: number) => void; // Nova prop para arrastar poste
   onUploadImage: () => void;
   onDeleteImage: () => void;
   onDeletePoste: (posteId: string) => void;
@@ -41,6 +42,7 @@ export function CanvasVisual({
   onEditPost,
   onAddPoste: _onAddPoste, 
   onUpdatePoste,
+  onUpdatePostCoordinates,
   onUploadImage,
   onDeleteImage,
   onDeletePoste: _onDeletePoste,
@@ -66,6 +68,14 @@ export function CanvasVisual({
 
   // Estado para carregamento de imagem normal
   const [imageLoading, setImageLoading] = useState(false);
+
+  // Estados para drag de postes
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedPostId, setDraggedPostId] = useState<string | null>(null);
+  const [dragStartMousePos, setDragStartMousePos] = useState({ x: 0, y: 0 });
+  const [dragStartPostPos, setDragStartPostPos] = useState({ x: 0, y: 0 });
+  const [tempPostPosition, setTempPostPosition] = useState<{ x: number; y: number } | null>(null);
+  const canvasLayerRef = useRef<HTMLDivElement>(null);
   
 
 
@@ -257,6 +267,91 @@ export function CanvasVisual({
     }
   };
 
+  // Função helper para obter as coordenadas do poste (temporárias durante drag ou normais)
+  const getPostCoordinates = (post: BudgetPostDetail) => {
+    if (isDragging && draggedPostId === post.id && tempPostPosition) {
+      return { x: tempPostPosition.x, y: tempPostPosition.y };
+    }
+    return { x: post.x_coord, y: post.y_coord };
+  };
+
+  // Handlers para arrastar postes
+  const handlePostDragStart = (postId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    const post = budgetDetails?.posts?.find(p => p.id === postId);
+    if (!post) return;
+
+    setIsDragging(true);
+    setDraggedPostId(postId);
+    
+    // Armazenar a posição inicial do mouse (coordenadas da tela)
+    setDragStartMousePos({ x: e.clientX, y: e.clientY });
+    
+    // Armazenar a posição inicial do poste
+    setDragStartPostPos({ x: post.x_coord, y: post.y_coord });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !draggedPostId) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Calcular o delta do movimento do mouse
+    const deltaX = e.clientX - dragStartMousePos.x;
+    const deltaY = e.clientY - dragStartMousePos.y;
+    
+    // Obter o scale atual do transform
+    const scale = transformRef.current?.instance?.transformState?.scale || 1;
+    
+    // Calcular o delta ajustado pela escala
+    const adjustedDeltaX = deltaX / scale;
+    const adjustedDeltaY = deltaY / scale;
+
+    // Calcular a nova posição baseada na posição inicial + delta
+    const newX = dragStartPostPos.x + adjustedDeltaX;
+    const newY = dragStartPostPos.y + adjustedDeltaY;
+
+    // Atualizar a posição temporária para feedback visual
+    setTempPostPosition({ x: Math.max(0, newX), y: Math.max(0, newY) });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!isDragging || !draggedPostId) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Calcular o delta do movimento do mouse
+    const deltaX = e.clientX - dragStartMousePos.x;
+    const deltaY = e.clientY - dragStartMousePos.y;
+
+    // Obter o scale atual do transform
+    const scale = transformRef.current?.instance?.transformState?.scale || 1;
+    
+    // Calcular o delta ajustado pela escala
+    const adjustedDeltaX = deltaX / scale;
+    const adjustedDeltaY = deltaY / scale;
+
+    // Calcular as coordenadas finais
+    const finalX = Math.max(0, Math.round(dragStartPostPos.x + adjustedDeltaX));
+    const finalY = Math.max(0, Math.round(dragStartPostPos.y + adjustedDeltaY));
+
+    // Atualizar no banco de dados
+    if (onUpdatePostCoordinates) {
+      onUpdatePostCoordinates(draggedPostId, finalX, finalY);
+    }
+
+    // Resetar estados
+    setIsDragging(false);
+    setDraggedPostId(null);
+    setDragStartMousePos({ x: 0, y: 0 });
+    setDragStartPostPos({ x: 0, y: 0 });
+    setTempPostPosition(null);
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Controles superiores */}
@@ -437,10 +532,14 @@ export function CanvasVisual({
                   {!hasImage ? (
                     // === CASO 1: QUADRO BRANCO (6000x6000px) - APENAS quando não há imagem ===
                     <div 
-                      className="relative cursor-crosshair"
+                      ref={canvasLayerRef}
+                      className={`relative ${isDragging ? 'cursor-grabbing' : 'cursor-crosshair'}`}
                       onContextMenu={handleQuadroBrancoRightClick}
                       onDrop={handleDrop}
                       onDragOver={(e) => e.preventDefault()}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
                       style={{
                         width: '6000px',
                         height: '6000px',
@@ -484,18 +583,23 @@ export function CanvasVisual({
                       )}
                       
                       {/* Postes do banco de dados - Para quadro branco vazio */}
-                      {budgetDetails?.posts?.map((post) => (
-                        <PostIcon
-                          key={post.id}
-                          id={post.id}
-                          name={post.name}
-                          x={post.x_coord}  // USAR PIXELS DIRETOS
-                          y={post.y_coord}  // USAR PIXELS DIRETOS
-                          isSelected={selectedPostDetail?.id === post.id}
-                          onClick={() => onPostDetailClick?.(post)}
-                          onLeftClick={() => onEditPost?.(post)}
-                        />
-                      ))}
+                      {budgetDetails?.posts?.map((post) => {
+                        const coords = getPostCoordinates(post);
+                        return (
+                          <PostIcon
+                            key={post.id}
+                            id={post.id}
+                            name={post.name}
+                            x={coords.x}  // USAR PIXELS DIRETOS
+                            y={coords.y}  // USAR PIXELS DIRETOS
+                            isSelected={selectedPostDetail?.id === post.id}
+                            onClick={() => onPostDetailClick?.(post)}
+                            onLeftClick={() => onEditPost?.(post)}
+                            onDragStart={(e) => handlePostDragStart(post.id, e)}
+                            isDragging={isDragging && draggedPostId === post.id}
+                          />
+                        );
+                      })}
                     </div>
                   ) : isPDF ? (
                     // === CASO 2: PDF SIMPLES ===
@@ -579,7 +683,8 @@ export function CanvasVisual({
                       
                       {/* CAMADA TRANSPARENTE 6000x6000 para capturar cliques - NA FRENTE DE TUDO */}
                       <div 
-                        className="absolute top-0 left-0 cursor-crosshair"
+                        ref={canvasLayerRef}
+                        className={`absolute top-0 left-0 ${isDragging ? 'cursor-grabbing' : 'cursor-crosshair'}`}
                         onContextMenu={(e) => {
                           e.preventDefault();
 
@@ -592,6 +697,9 @@ export function CanvasVisual({
                         }}
                         onDrop={handleDrop}
                         onDragOver={(e) => e.preventDefault()}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
                         style={{
                           width: '6000px',
                           height: '6000px',
@@ -601,30 +709,39 @@ export function CanvasVisual({
                         }}
                       >
                         {/* Postes renderizados na camada transparente */}
-                        {budgetDetails?.posts?.map((post) => (
-                          <PostIcon
-                            key={post.id}
-                            id={post.id}
-                            name={post.name}
-                            x={post.x_coord}
-                            y={post.y_coord}
-                            isSelected={selectedPostDetail?.id === post.id}
-                            onClick={() => onPostDetailClick?.(post)}
-                            onLeftClick={() => onEditPost?.(post)}
-                          />
-                        ))}
+                        {budgetDetails?.posts?.map((post) => {
+                          const coords = getPostCoordinates(post);
+                          return (
+                            <PostIcon
+                              key={post.id}
+                              id={post.id}
+                              name={post.name}
+                              x={coords.x}
+                              y={coords.y}
+                              isSelected={selectedPostDetail?.id === post.id}
+                              onClick={() => onPostDetailClick?.(post)}
+                              onLeftClick={() => onEditPost?.(post)}
+                              onDragStart={(e) => handlePostDragStart(post.id, e)}
+                              isDragging={isDragging && draggedPostId === post.id}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (
                     // === CASO 3: IMAGEM NORMAL (LÓGICA ORIGINAL - SEM QUADRO BRANCO) ===
                     <div 
-                      className="relative cursor-crosshair flex items-center justify-center"
+                      ref={canvasLayerRef}
+                      className={`relative flex items-center justify-center ${isDragging ? 'cursor-grabbing' : 'cursor-crosshair'}`}
                       onClick={() => {
                         handleCanvasClick(undefined as any);
                       }}
                       onContextMenu={handleImageRightClick}
                       onDrop={handleDrop}
                       onDragOver={(e) => e.preventDefault()}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
                       style={{
                         width: '100%',
                         height: '100%',
@@ -660,18 +777,23 @@ export function CanvasVisual({
                         />
                       )}
                       {/* Postes do banco de dados - Imagem Normal */}
-                      {budgetDetails?.posts?.map((post) => (
-                        <PostIcon
-                          key={post.id}
-                          id={post.id}
-                          name={post.name}
-                          x={post.x_coord}
-                          y={post.y_coord}
-                          isSelected={selectedPostDetail?.id === post.id}
-                          onClick={() => onPostDetailClick?.(post)}
-                          onLeftClick={() => onEditPost?.(post)}
-                        />
-                      ))}
+                      {budgetDetails?.posts?.map((post) => {
+                        const coords = getPostCoordinates(post);
+                        return (
+                          <PostIcon
+                            key={post.id}
+                            id={post.id}
+                            name={post.name}
+                            x={coords.x}
+                            y={coords.y}
+                            isSelected={selectedPostDetail?.id === post.id}
+                            onClick={() => onPostDetailClick?.(post)}
+                            onLeftClick={() => onEditPost?.(post)}
+                            onDragStart={(e) => handlePostDragStart(post.id, e)}
+                            isDragging={isDragging && draggedPostId === post.id}
+                          />
+                        );
+                      })}
                     </div>
                   )}
               </TransformComponent>
