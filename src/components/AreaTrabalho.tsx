@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { CanvasVisual } from './CanvasVisual';
 import { PainelConsolidado } from './PainelConsolidado';
 import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../types';
-import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, ChevronUp, ChevronDown, EyeOff } from 'lucide-react';
+import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, ChevronUp, ChevronDown, EyeOff, Search } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
 import { EditPostModal } from './modals/EditPostModal';
@@ -746,6 +746,7 @@ function PostListAccordion({
   removeLooseMaterialFromPost
 }: PostListAccordionProps) {
   const [isRendering, setIsRendering] = useState(false);
+  const [postSearchTerm, setPostSearchTerm] = useState('');
   const postsToDisplay = budgetDetails?.posts || [];
 
   // Debounce para evitar renderizações conflitantes
@@ -762,6 +763,17 @@ function PostListAccordion({
   const [materialSearchTerm, setMaterialSearchTerm] = useState('');
   const [addingLooseMaterial, setAddingLooseMaterial] = useState(false);
   const [removingLooseMaterial, setRemovingLooseMaterial] = useState<string | null>(null);
+  
+  // Filtrar postes baseado no termo de busca
+  const filteredPosts = useMemo(() => {
+    if (!postSearchTerm) return postsToDisplay;
+    
+    const searchLower = postSearchTerm.toLowerCase();
+    return postsToDisplay.filter((post: any) => 
+      post.name?.toLowerCase().includes(searchLower) ||
+      post.post_types?.name?.toLowerCase().includes(searchLower)
+    );
+  }, [postsToDisplay, postSearchTerm]);
   
 
   
@@ -819,14 +831,40 @@ function PostListAccordion({
 
   return (
     <div>
-      <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200">
-        <div className="flex items-center space-x-2">
-          <Folder className="h-5 w-5 text-blue-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Lista de Postes</h3>
+      <div className="p-6 pb-4 border-b border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <Folder className="h-5 w-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Lista de Postes</h3>
+          </div>
+          <span className="text-sm font-medium text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
+            {filteredPosts.length} de {postsToDisplay.length} {postsToDisplay.length === 1 ? 'poste' : 'postes'}
+          </span>
         </div>
-        <span className="text-sm font-medium text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
-          {postsToDisplay.length} {postsToDisplay.length === 1 ? 'poste' : 'postes'}
-        </span>
+        
+        {/* Campo de busca de postes */}
+        {postsToDisplay.length > 0 && (
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar postes por nome ou tipo..."
+              value={postSearchTerm}
+              onChange={(e) => setPostSearchTerm(e.target.value)}
+              className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            />
+            {postSearchTerm && (
+              <button
+                onClick={() => setPostSearchTerm('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isRendering ? (
@@ -843,10 +881,24 @@ function PostListAccordion({
             <p className="text-sm mt-1">Adicione uma imagem de planta e clique com o botão direito nela para criar postes</p>
           </div>
         </div>
+      ) : filteredPosts.length === 0 ? (
+        <div className="flex items-center justify-center py-12 text-gray-500">
+          <div className="text-center">
+            <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p className="font-medium">Nenhum poste encontrado</p>
+            <p className="text-sm mt-1">Tente ajustar os termos de busca</p>
+            <button
+              onClick={() => setPostSearchTerm('')}
+              className="mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm"
+            >
+              Limpar busca
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="px-6 pb-6">
           <Accordion type="single" collapsible className="w-full">
-            {postsToDisplay.map((post: any) => {
+            {filteredPosts.map((post: any) => {
               const postName = post.name;
               const postType = post.post_types?.name;
               const postGroups = post.post_item_groups;

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, BudgetDetails, PostType } from '../types';
+import { Material, GrupoItem, Concessionaria, Orcamento, BudgetPostDetail, BudgetDetails, PostType, BudgetFolder } from '../types';
 import { gruposItens as initialGrupos, concessionarias, orcamentos as initialOrcamentos } from '../data/mockData';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
@@ -28,6 +28,10 @@ interface AppContextType {
   loadingCompanies: boolean;
   loadingGroups: boolean;
   currentGroup: GrupoItem | null;
+  
+  // Estados para sistema de pastas
+  folders: BudgetFolder[];
+  loadingFolders: boolean;
   
   setCurrentView: (view: string) => void;
   setCurrentOrcamento: (orcamento: Orcamento | null) => void;
@@ -86,6 +90,13 @@ interface AppContextType {
   addPostType: (data: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => Promise<void>;
   updatePostType: (id: string, data: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => Promise<void>;
   deletePostType: (id: string) => Promise<void>;
+  
+  // Funções para sistema de pastas
+  fetchFolders: () => Promise<void>;
+  addFolder: (name: string, color?: string) => Promise<void>;
+  updateFolder: (id: string, name: string, color?: string) => Promise<void>;
+  deleteFolder: (id: string) => Promise<void>;
+  moveBudgetToFolder: (budgetId: string, folderId: string | null) => Promise<void>;
   
   // Funções locais (legacy)
   addGrupoItem: (grupo: Omit<GrupoItem, 'id'>) => void;
@@ -190,6 +201,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loadingCompanies, setLoadingCompanies] = useState<boolean>(false);
   const [loadingGroups, setLoadingGroups] = useState<boolean>(false);
   const [currentGroup, setCurrentGroup] = useState<GrupoItem | null>(null);
+
+  // Estados para sistema de pastas
+  const [folders, setFolders] = useState<BudgetFolder[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState<boolean>(false);
 
   // Efeito para inicializar o AppContext apenas após o AuthContext estar estável
   useEffect(() => {
@@ -417,7 +432,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       
       // Buscar TODOS os orçamentos usando a função helper de paginação
-      const data = await fetchAllRecords('budgets', '*, plan_image_url', 'created_at', false, { user_id: user.id });
+      const data = await fetchAllRecords('budgets', '*, plan_image_url, folder_id', 'created_at', false, { user_id: user.id });
 
 
 
@@ -438,6 +453,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           dataModificacao: item.updated_at ? new Date(item.updated_at).toISOString().split('T')[0] : '',
           status: normalizedStatus,
           postes: [], // Será implementado quando conectarmos os postes
+          folderId: item.folder_id || null,
           ...(item.client_name && { clientName: item.client_name }),
           ...(item.city && { city: item.city }),
           ...(item.plan_image_url && { imagemPlanta: item.plan_image_url }),
@@ -2438,9 +2454,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateGroup = async (groupId: string, groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => {
     try {
-
+      console.log('🔄 Atualizando grupo:', groupId);
       
-      // Atualizar o registro principal na tabela item_group_templates
+      // 1. Atualizar o registro principal na tabela item_group_templates
       const { error: updateError } = await supabase
         .from('item_group_templates')
         .update({
@@ -2455,9 +2471,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw updateError;
       }
 
+      console.log('✅ Template do grupo atualizado');
 
-
-      // Deletar todos os materiais existentes para este grupo
+      // 2. Deletar todos os materiais existentes para este grupo (template)
       const { error: deleteError } = await supabase
         .from('template_materials')
         .delete()
@@ -2468,9 +2484,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw deleteError;
       }
 
+      console.log('✅ Materiais antigos do template removidos');
 
-
-      // Inserir nova lista de materiais
+      // 3. Inserir nova lista de materiais no template
       if (groupData.materials.length > 0) {
         const materialsData = groupData.materials.map(material => ({
           template_id: groupId,
@@ -2487,11 +2503,154 @@ export function AppProvider({ children }: { children: ReactNode }) {
           throw materialsError;
         }
 
-
+        console.log('✅ Novos materiais adicionados ao template');
       }
 
-      // Atualizar a UI com os dados atualizados
+      // 4. SINCRONIZAR INSTÂNCIAS DO GRUPO EM ORÇAMENTOS
+      // Buscar todas as instâncias deste grupo que estão sendo usadas em orçamentos
+      const { data: groupInstances, error: instancesError } = await supabase
+        .from('post_item_groups')
+        .select('id, budget_post_id')
+        .eq('template_id', groupId);
+
+      if (instancesError) {
+        console.error('Erro ao buscar instâncias do grupo:', instancesError);
+        throw instancesError;
+      }
+
+      if (groupInstances && groupInstances.length > 0) {
+        console.log(`🔄 Atualizando ${groupInstances.length} instâncias do grupo em orçamentos...`);
+
+        // Para cada instância, atualizar seus materiais
+        for (const instance of groupInstances) {
+          // 4a. Atualizar o nome do grupo na instância
+          const { error: updateInstanceError } = await supabase
+            .from('post_item_groups')
+            .update({ name: groupData.name })
+            .eq('id', instance.id);
+
+          if (updateInstanceError) {
+            console.error(`Erro ao atualizar nome da instância ${instance.id}:`, updateInstanceError);
+            // Continuar mesmo com erro
+          }
+
+          // 4b. Buscar os materiais atuais da instância
+          const { data: currentMaterials, error: currentMaterialsError } = await supabase
+            .from('post_item_group_materials')
+            .select('material_id, quantity, price_at_addition')
+            .eq('post_item_group_id', instance.id);
+
+          if (currentMaterialsError) {
+            console.error(`Erro ao buscar materiais da instância ${instance.id}:`, currentMaterialsError);
+            continue;
+          }
+
+          // Criar um mapa dos materiais atuais
+          const currentMaterialsMap = new Map(
+            currentMaterials?.map(m => [m.material_id, m]) || []
+          );
+
+          // Criar um mapa dos novos materiais do template
+          const newMaterialsMap = new Map(
+            groupData.materials.map(m => [m.material_id, m])
+          );
+
+          // 4c. Identificar materiais para remover (que existem na instância mas não no novo template)
+          const materialsToRemove = Array.from(currentMaterialsMap.keys()).filter(
+            materialId => !newMaterialsMap.has(materialId)
+          );
+
+          // Remover materiais que não existem mais no template
+          if (materialsToRemove.length > 0) {
+            const { error: removeError } = await supabase
+              .from('post_item_group_materials')
+              .delete()
+              .eq('post_item_group_id', instance.id)
+              .in('material_id', materialsToRemove);
+
+            if (removeError) {
+              console.error(`Erro ao remover materiais obsoletos da instância ${instance.id}:`, removeError);
+            } else {
+              console.log(`✅ Removidos ${materialsToRemove.length} materiais obsoletos da instância ${instance.id}`);
+            }
+          }
+
+          // 4d. Identificar materiais para adicionar (que existem no novo template mas não na instância)
+          const materialsToAdd = Array.from(newMaterialsMap.keys()).filter(
+            materialId => !currentMaterialsMap.has(materialId)
+          );
+
+          // Adicionar novos materiais
+          if (materialsToAdd.length > 0) {
+            // Buscar preços dos novos materiais
+            const { data: newMaterialsData, error: newMaterialsDataError } = await supabase
+              .from('materials')
+              .select('id, price')
+              .in('id', materialsToAdd);
+
+            if (newMaterialsDataError) {
+              console.error(`Erro ao buscar dados dos novos materiais:`, newMaterialsDataError);
+            } else {
+              const priceMap = new Map(
+                newMaterialsData?.map(m => [m.id, m.price || 0]) || []
+              );
+
+              const newMaterialsToInsert = materialsToAdd.map(materialId => ({
+                post_item_group_id: instance.id,
+                material_id: materialId,
+                quantity: newMaterialsMap.get(materialId)!.quantity,
+                price_at_addition: priceMap.get(materialId) || 0,
+              }));
+
+              const { error: insertError } = await supabase
+                .from('post_item_group_materials')
+                .insert(newMaterialsToInsert);
+
+              if (insertError) {
+                console.error(`Erro ao adicionar novos materiais à instância ${instance.id}:`, insertError);
+              } else {
+                console.log(`✅ Adicionados ${materialsToAdd.length} novos materiais à instância ${instance.id}`);
+              }
+            }
+          }
+
+          // 4e. Atualizar quantidades dos materiais que já existem
+          const materialsToUpdate = Array.from(newMaterialsMap.keys()).filter(
+            materialId => currentMaterialsMap.has(materialId)
+          );
+
+          for (const materialId of materialsToUpdate) {
+            const newQuantity = newMaterialsMap.get(materialId)!.quantity;
+            const currentQuantity = currentMaterialsMap.get(materialId)!.quantity;
+
+            // Só atualizar se a quantidade mudou
+            if (newQuantity !== currentQuantity) {
+              const { error: updateQuantityError } = await supabase
+                .from('post_item_group_materials')
+                .update({ quantity: newQuantity })
+                .eq('post_item_group_id', instance.id)
+                .eq('material_id', materialId);
+
+              if (updateQuantityError) {
+                console.error(`Erro ao atualizar quantidade do material ${materialId}:`, updateQuantityError);
+              }
+            }
+          }
+        }
+
+        console.log('✅ Todas as instâncias do grupo foram atualizadas nos orçamentos');
+
+        // 5. Atualizar o estado local budgetDetails se o orçamento atual está afetado
+        if (currentOrcamento && budgetDetails) {
+          console.log('🔄 Recarregando detalhes do orçamento atual...');
+          await fetchBudgetDetails(currentOrcamento.id);
+        }
+      }
+
+      // 6. Atualizar a UI com os dados atualizados
       await fetchItemGroups(groupData.company_id);
+      
+      console.log('✅ Grupo atualizado com sucesso em todos os orçamentos!');
     } catch (error) {
       console.error('Erro ao atualizar grupo:', error);
       throw error;
@@ -2548,6 +2707,187 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Funções para sistema de pastas
+  const fetchFolders = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      setLoadingFolders(true);
+
+      const { data, error } = await supabase
+        .from('budget_folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao buscar pastas:', error);
+        throw error;
+      }
+
+      const foldersFormatted: BudgetFolder[] = data?.map(folder => ({
+        id: folder.id,
+        name: folder.name,
+        color: folder.color || undefined,
+        userId: folder.user_id,
+        createdAt: folder.created_at,
+        updatedAt: folder.updated_at,
+      })) || [];
+
+      setFolders(foldersFormatted);
+    } catch (error) {
+      console.error('Erro ao buscar pastas:', error);
+      setFolders([]);
+    } finally {
+      setLoadingFolders(false);
+    }
+  }, [user]);
+
+  const addFolder = async (name: string, color?: string) => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('budget_folders')
+        .insert({
+          name: name.trim(),
+          color: color || null,
+          user_id: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao criar pasta:', error);
+        throw error;
+      }
+
+      const newFolder: BudgetFolder = {
+        id: data.id,
+        name: data.name,
+        color: data.color || undefined,
+        userId: data.user_id,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      setFolders(prev => [...prev, newFolder]);
+    } catch (error) {
+      console.error('Erro ao criar pasta:', error);
+      throw error;
+    }
+  };
+
+  const updateFolder = async (id: string, name: string, color?: string) => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('budget_folders')
+        .update({
+          name: name.trim(),
+          color: color || null,
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro ao atualizar pasta:', error);
+        throw error;
+      }
+
+      const updatedFolder: BudgetFolder = {
+        id: data.id,
+        name: data.name,
+        color: data.color || undefined,
+        userId: data.user_id,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      setFolders(prev => prev.map(folder => folder.id === id ? updatedFolder : folder));
+    } catch (error) {
+      console.error('Erro ao atualizar pasta:', error);
+      throw error;
+    }
+  };
+
+  const deleteFolder = async (id: string) => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      // Primeiro, mover todos os orçamentos dessa pasta para "Sem pasta"
+      const { error: updateError } = await supabase
+        .from('budgets')
+        .update({ folder_id: null })
+        .eq('folder_id', id)
+        .eq('user_id', user.id);
+
+      if (updateError) {
+        console.error('Erro ao mover orçamentos da pasta:', updateError);
+        throw updateError;
+      }
+
+      // Depois, deletar a pasta
+      const { error } = await supabase
+        .from('budget_folders')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Erro ao excluir pasta:', error);
+        throw error;
+      }
+
+      // Atualizar estado local
+      setFolders(prev => prev.filter(folder => folder.id !== id));
+      setBudgets(prev => prev.map(budget => 
+        budget.folderId === id ? { ...budget, folderId: null } : budget
+      ));
+    } catch (error) {
+      console.error('Erro ao excluir pasta:', error);
+      throw error;
+    }
+  };
+
+  const moveBudgetToFolder = async (budgetId: string, folderId: string | null) => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('budgets')
+        .update({ folder_id: folderId })
+        .eq('id', budgetId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Erro ao mover orçamento:', error);
+        throw error;
+      }
+
+      // Atualizar estado local
+      setBudgets(prev => prev.map(budget => 
+        budget.id === budgetId ? { ...budget, folderId } : budget
+      ));
+    } catch (error) {
+      console.error('Erro ao mover orçamento:', error);
+      throw error;
+    }
+  };
+
   // Função centralizada para buscar todos os dados essenciais
   const fetchAllCoreData = useCallback(async () => {
     console.log("🔄 Sincronizando todos os dados com o banco de dados...");
@@ -2559,6 +2899,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fetchMaterials(),
         fetchPostTypes(),
         fetchUtilityCompanies(),
+        fetchFolders(),
       ]);
 
       console.log("✅ Sincronização completa dos dados essenciais concluída");
@@ -2567,7 +2908,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [fetchBudgets, fetchMaterials, fetchPostTypes, fetchUtilityCompanies]);
+  }, [fetchBudgets, fetchMaterials, fetchPostTypes, fetchUtilityCompanies, fetchFolders]);
 
   // Se não estiver inicializado ainda, mostra loading
   if (!isInitialized) {
@@ -2605,6 +2946,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadingCompanies,
       loadingGroups,
       currentGroup,
+      
+      // Estados para sistema de pastas
+      folders,
+      loadingFolders,
       
       setCurrentView,
       setCurrentOrcamento,
@@ -2663,6 +3008,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPostType,
       updatePostType,
       deletePostType,
+      
+      // Funções para sistema de pastas
+      fetchFolders,
+      addFolder,
+      updateFolder,
+      deleteFolder,
+      moveBudgetToFolder,
       
       // Funções locais (legacy)
       addGrupoItem,

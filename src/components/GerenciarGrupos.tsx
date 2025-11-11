@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Filter, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Filter, Loader2, Search } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAlertDialog } from '../hooks/useAlertDialog';
 import { AlertDialog } from './ui/alert-dialog';
@@ -19,6 +19,7 @@ export function GerenciarGrupos() {
   } = useApp();
   const [selectedConcessionaria, setSelectedConcessionaria] = useState<string>('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   
   const alertDialog = useAlertDialog();
 
@@ -41,7 +42,16 @@ export function GerenciarGrupos() {
     }
   }, [selectedConcessionaria, fetchItemGroups]); // Função memoizada não causa loop
 
-  const gruposFiltrados = itemGroups;
+  // Filtrar grupos por termo de busca
+  const gruposFiltrados = itemGroups.filter((grupo) => {
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    const nomeMatch = grupo.nome.toLowerCase().includes(searchLower);
+    const descricaoMatch = grupo.descricao?.toLowerCase().includes(searchLower);
+    
+    return nomeMatch || descricaoMatch;
+  });
 
   const handleEdit = (grupo: GrupoItem) => {
     setCurrentGroup(grupo);
@@ -127,27 +137,60 @@ export function GerenciarGrupos() {
 
       <div className="bg-white rounded-lg shadow flex-1 flex flex-col overflow-hidden">
         <div className="p-4 border-b flex-shrink-0">
-          <div className="flex items-center space-x-4">
-            <Filter className="h-5 w-5 text-gray-500" />
-            <label className="text-sm font-medium text-gray-700">
-              Visualizar grupos da concessionária:
-            </label>
-            <select
-              value={selectedConcessionaria}
-              onChange={(e) => setSelectedConcessionaria(e.target.value)}
-              className="px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={utilityCompanies.length === 0}
-            >
-              {utilityCompanies.length === 0 ? (
-                <option value="">Nenhuma concessionária encontrada</option>
-              ) : (
-                utilityCompanies.map((concessionaria) => (
-                  <option key={concessionaria.id} value={concessionaria.id}>
-                    {concessionaria.sigla}
-                  </option>
-                ))
+          <div className="space-y-4">
+            {/* Filtro de Concessionária */}
+            <div className="flex items-center space-x-4">
+              <Filter className="h-5 w-5 text-gray-500" />
+              <label className="text-sm font-medium text-gray-700">
+                Visualizar grupos da concessionária:
+              </label>
+              <select
+                value={selectedConcessionaria}
+                onChange={(e) => setSelectedConcessionaria(e.target.value)}
+                className="px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={utilityCompanies.length === 0}
+              >
+                {utilityCompanies.length === 0 ? (
+                  <option value="">Nenhuma concessionária encontrada</option>
+                ) : (
+                  utilityCompanies.map((concessionaria) => (
+                    <option key={concessionaria.id} value={concessionaria.id}>
+                      {concessionaria.sigla}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            {/* Campo de Busca */}
+            <div className="flex items-center space-x-4">
+              <Search className="h-5 w-5 text-gray-500" />
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar grupos por nome ou descrição..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="Limpar busca"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {searchTerm && (
+                <span className="text-sm text-gray-500">
+                  {gruposFiltrados.length} resultado{gruposFiltrados.length !== 1 ? 's' : ''}
+                </span>
               )}
-            </select>
+            </div>
           </div>
         </div>
 
@@ -209,15 +252,31 @@ export function GerenciarGrupos() {
           {!loadingGroups && gruposFiltrados.length === 0 && selectedConcessionaria && (
             <div className="flex-1 flex items-center justify-center py-12">
               <div className="text-center">
-                <p className="text-gray-500 mb-4">
-                  Nenhum grupo de itens encontrado para {concessionariaSelecionada?.sigla}.
-                </p>
-                <button
-                  onClick={handleNovoGrupo}
-                  className="text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Criar primeiro grupo de itens
-                </button>
+                {searchTerm ? (
+                  <>
+                    <p className="text-gray-500 mb-4">
+                      Nenhum grupo de itens encontrado com o termo "{searchTerm}".
+                    </p>
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      Limpar busca
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-500 mb-4">
+                      Nenhum grupo de itens encontrado para {concessionariaSelecionada?.sigla}.
+                    </p>
+                    <button
+                      onClick={handleNovoGrupo}
+                      className="text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      Criar primeiro grupo de itens
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}

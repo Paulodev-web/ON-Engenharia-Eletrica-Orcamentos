@@ -48,6 +48,16 @@ export interface Orcamento {
   postes: Poste[];
   clientName?: string;
   city?: string;
+  folderId?: string | null; // ID da pasta onde o orçamento está
+}
+
+export interface BudgetFolder {
+  id: string;
+  name: string;
+  color?: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MaterialConsolidado {
