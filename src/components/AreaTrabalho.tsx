@@ -622,19 +622,29 @@ interface QuantityEditorProps {
 }
 
 function QuantityEditor({ postGroupId, materialId, currentQuantity, unit, onUpdateQuantity }: QuantityEditorProps) {
-  const [localQuantity, setLocalQuantity] = useState(currentQuantity);
+  const [localQuantity, setLocalQuantity] = useState<string | number>(currentQuantity);
   const [isSaving, setIsSaving] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
 
-  // Atualizar valor local quando prop mudar
+  // Atualizar valor local quando prop mudar (apenas se não estiver editando)
   useEffect(() => {
-    setLocalQuantity(currentQuantity);
+    // Só atualizar se não estiver editando (campo não está vazio)
+    // Se o campo estiver vazio, significa que o usuário está editando
+    if (localQuantity !== '') {
+      setLocalQuantity(currentQuantity);
+    }
   }, [currentQuantity]);
 
   // Debounce function
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   const handleQuantityChange = useCallback((newValue: number) => {
+    // Validar valor antes de atualizar
+    if (isNaN(newValue) || newValue < 0) {
+      setLocalQuantity(currentQuantity);
+      return;
+    }
+
     setLocalQuantity(newValue);
 
     // Limpar timer anterior
@@ -663,15 +673,60 @@ function QuantityEditor({ postGroupId, materialId, currentQuantity, unit, onUpda
   }, [currentQuantity, onUpdateQuantity, postGroupId, materialId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value) || 0;
-    handleQuantityChange(value);
+    const value = e.target.value;
+    
+    // Permitir campo vazio durante edição
+    if (value === '') {
+      setLocalQuantity('');
+      // Limpar timer se houver
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+      return;
+    }
+    
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= 0) {
+      setLocalQuantity(numValue);
+      // Limpar timer anterior
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+      
+      // Se a quantidade for diferente da atual, salvar após delay
+      if (numValue !== currentQuantity) {
+        debounceTimer.current = setTimeout(async () => {
+          setIsSaving(true);
+          try {
+            await onUpdateQuantity(postGroupId, materialId, numValue);
+            setShowSaved(true);
+            setTimeout(() => setShowSaved(false), 1500);
+          } catch (error) {
+            console.error('Erro ao salvar quantidade:', error);
+            setLocalQuantity(currentQuantity); // Reverter para valor original
+            alert('Erro ao salvar quantidade. Tente novamente.');
+          } finally {
+            setIsSaving(false);
+          }
+        }, 800); // Debounce de 800ms
+      }
+    }
   };
 
   const handleBlur = () => {
+    // Se o campo estiver vazio, restaurar valor original
+    if (localQuantity === '') {
+      setLocalQuantity(currentQuantity);
+      return;
+    }
+    
     // Garantir que o valor seja válido no blur
-    if (localQuantity < 0) {
-      setLocalQuantity(0);
-      handleQuantityChange(0);
+    const numValue = typeof localQuantity === 'number' ? localQuantity : parseFloat(String(localQuantity));
+    if (isNaN(numValue) || numValue < 0) {
+      setLocalQuantity(currentQuantity);
+    } else if (numValue !== currentQuantity) {
+      // Se mudou, garantir que foi salvo
+      handleQuantityChange(numValue);
     }
   };
 
@@ -689,7 +744,7 @@ function QuantityEditor({ postGroupId, materialId, currentQuantity, unit, onUpda
       <input
         type="number"
         min="0"
-        value={localQuantity}
+        value={localQuantity === '' ? '' : localQuantity}
         onChange={handleInputChange}
         onBlur={handleBlur}
         className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"

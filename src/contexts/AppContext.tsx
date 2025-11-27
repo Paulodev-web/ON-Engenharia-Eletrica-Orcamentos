@@ -67,6 +67,7 @@ interface AppContextType {
   updatePostCoordinates: (postId: string, x: number, y: number) => Promise<void>;
   removeGroupFromPost: (postGroupId: string) => Promise<void>;
   updateMaterialQuantityInPostGroup: (postGroupId: string, materialId: string, newQuantity: number) => Promise<void>;
+  removeMaterialFromPostGroup: (postGroupId: string, materialId: string) => Promise<void>;
   
   // Funções para materiais avulsos
   addLooseMaterialToPost: (postId: string, materialId: string, quantity: number, price: number) => Promise<void>;
@@ -1952,6 +1953,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Função para remover material de um grupo de itens do poste
+  const removeMaterialFromPostGroup = async (postGroupId: string, materialId: string) => {
+    try {
+      const { error } = await supabase
+        .from('post_item_group_materials')
+        .delete()
+        .eq('post_item_group_id', postGroupId)
+        .eq('material_id', materialId);
+
+      if (error) {
+        console.error('Erro ao remover material do grupo:', error);
+        throw error;
+      }
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          posts: prev.posts.map(post => ({
+            ...post,
+            post_item_groups: post.post_item_groups.map(group => {
+              if (group.id === postGroupId) {
+                return {
+                  ...group,
+                  post_item_group_materials: group.post_item_group_materials.filter(
+                    material => material.material_id !== materialId
+                  )
+                };
+              }
+              return group;
+            })
+          }))
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao remover material do grupo:', error);
+      throw error;
+    }
+  };
+
   // Função para adicionar material avulso ao poste (usado quando usuário adiciona manualmente)
   const addLooseMaterialToPost = async (postId: string, materialId: string, quantity: number, price: number) => {
     try {
@@ -2985,6 +3028,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePostCoordinates,
       removeGroupFromPost,
       updateMaterialQuantityInPostGroup,
+      removeMaterialFromPostGroup,
       
       // Funções para materiais avulsos
       addLooseMaterialToPost,

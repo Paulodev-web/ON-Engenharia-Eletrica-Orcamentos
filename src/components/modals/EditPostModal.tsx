@@ -27,6 +27,7 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
     addGroupToPost,
     removeGroupFromPost,
     updateMaterialQuantityInPostGroup,
+    removeMaterialFromPostGroup,
     addLooseMaterialToPost,
     updateLooseMaterialQuantity,
     removeLooseMaterialFromPost,
@@ -43,6 +44,7 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
   const [groupSearchTerm, setGroupSearchTerm] = useState('');
   const [addingGroup, setAddingGroup] = useState(false);
   const [removingGroup, setRemovingGroup] = useState<string | null>(null);
+  const [removingMaterialFromGroup, setRemovingMaterialFromGroup] = useState<{postGroupId: string, materialId: string} | null>(null);
   
   // Estados dos materiais avulsos
   const [materialSearchTerm, setMaterialSearchTerm] = useState('');
@@ -189,6 +191,37 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
     } finally {
       setEditingQuantities(prev => ({ ...prev, [`${postGroupId}-${materialId}`]: false }));
     }
+  };
+
+  // Função para remover material de um grupo
+  const handleRemoveMaterialFromGroup = async (postGroupId: string, materialId: string, materialName: string) => {
+    alertDialog.showConfirm(
+      'Remover Material',
+      `Tem certeza que deseja remover "${materialName}" deste grupo? Esta ação não pode ser desfeita.`,
+      async () => {
+        setRemovingMaterialFromGroup({ postGroupId, materialId });
+        try {
+          await removeMaterialFromPostGroup(postGroupId, materialId);
+          
+          alertDialog.showSuccess(
+            'Material Removido',
+            'O material foi removido do grupo com sucesso.'
+          );
+        } catch (error) {
+          alertDialog.showError(
+            'Erro ao Remover',
+            'Não foi possível remover o material. Tente novamente.'
+          );
+        } finally {
+          setRemovingMaterialFromGroup(null);
+        }
+      },
+      {
+        type: 'destructive',
+        confirmText: 'Remover',
+        cancelText: 'Cancelar'
+      }
+    );
   };
 
   // Função para adicionar material avulso
@@ -666,10 +699,43 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
                                       type="number"
                                       min="0"
                                       step="0.01"
-                                      value={material.quantity}
+                                      value={inputStates[`${group.id}-${material.material_id}`] !== undefined 
+                                        ? inputStates[`${group.id}-${material.material_id}`] 
+                                        : material.quantity}
                                       onChange={(e) => {
-                                        const newValue = parseFloat(e.target.value) || 0;
-                                        handleUpdateGroupMaterialQuantity(group.id, material.material_id, newValue);
+                                        const value = e.target.value;
+                                        // Permitir campo vazio durante edição
+                                        setInputStates(prev => ({ ...prev, [`${group.id}-${material.material_id}`]: value }));
+                                        
+                                        // Só atualizar se o valor for válido e maior que 0
+                                        const normalizedValue = value.replace(',', '.');
+                                        const numValue = parseFloat(normalizedValue);
+                                        if (!isNaN(numValue) && numValue >= 0 && value !== '') {
+                                          handleUpdateGroupMaterialQuantity(group.id, material.material_id, numValue);
+                                        }
+                                      }}
+                                      onBlur={(e) => {
+                                        const value = e.target.value;
+                                        const normalizedValue = value.replace(',', '.');
+                                        const numValue = parseFloat(normalizedValue);
+                                        
+                                        // Se o campo estiver vazio ou inválido, restaurar o valor original
+                                        if (value === '' || isNaN(numValue) || numValue < 0) {
+                                          setInputStates(prev => {
+                                            const newState = { ...prev };
+                                            delete newState[`${group.id}-${material.material_id}`];
+                                            return newState;
+                                          });
+                                        } else {
+                                          // Garantir que o valor foi salvo
+                                          handleUpdateGroupMaterialQuantity(group.id, material.material_id, numValue);
+                                          // Limpar o estado do input após salvar
+                                          setInputStates(prev => {
+                                            const newState = { ...prev };
+                                            delete newState[`${group.id}-${material.material_id}`];
+                                            return newState;
+                                          });
+                                        }
                                       }}
                                       className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                     />
@@ -681,6 +747,18 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
                                   <div className="text-sm text-gray-600 min-w-[100px] text-right">
                                     R$ {(material.price_at_addition * material.quantity).toFixed(2)}
                                   </div>
+                                  <button
+                                    onClick={() => handleRemoveMaterialFromGroup(group.id, material.material_id, material.materials.name)}
+                                    disabled={removingMaterialFromGroup?.postGroupId === group.id && removingMaterialFromGroup?.materialId === material.material_id}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-md transition-colors disabled:opacity-50"
+                                    title="Remover material do grupo"
+                                  >
+                                    {removingMaterialFromGroup?.postGroupId === group.id && removingMaterialFromGroup?.materialId === material.material_id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <X className="h-4 w-4" />
+                                    )}
+                                  </button>
                                 </div>
                               </div>
                             ))
@@ -843,10 +921,43 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
                               type="number"
                               min="0"
                               step="0.01"
-                              value={material.quantity}
+                              value={inputStates[`loose-${material.id}`] !== undefined 
+                                ? inputStates[`loose-${material.id}`] 
+                                : material.quantity}
                               onChange={(e) => {
-                                const newValue = parseFloat(e.target.value) || 0;
-                                handleUpdateLooseMaterialQuantity(material.id, newValue);
+                                const value = e.target.value;
+                                // Permitir campo vazio durante edição
+                                setInputStates(prev => ({ ...prev, [`loose-${material.id}`]: value }));
+                                
+                                // Só atualizar se o valor for válido e maior ou igual a 0
+                                const normalizedValue = value.replace(',', '.');
+                                const numValue = parseFloat(normalizedValue);
+                                if (!isNaN(numValue) && numValue >= 0 && value !== '') {
+                                  handleUpdateLooseMaterialQuantity(material.id, numValue);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                const normalizedValue = value.replace(',', '.');
+                                const numValue = parseFloat(normalizedValue);
+                                
+                                // Se o campo estiver vazio ou inválido, restaurar o valor original
+                                if (value === '' || isNaN(numValue) || numValue < 0) {
+                                  setInputStates(prev => {
+                                    const newState = { ...prev };
+                                    delete newState[`loose-${material.id}`];
+                                    return newState;
+                                  });
+                                } else {
+                                  // Garantir que o valor foi salvo
+                                  handleUpdateLooseMaterialQuantity(material.id, numValue);
+                                  // Limpar o estado do input após salvar
+                                  setInputStates(prev => {
+                                    const newState = { ...prev };
+                                    delete newState[`loose-${material.id}`];
+                                    return newState;
+                                  });
+                                }
                               }}
                               className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                             />
