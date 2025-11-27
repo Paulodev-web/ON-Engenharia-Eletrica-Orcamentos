@@ -488,6 +488,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           company_id: budgetData.company_id, // CRÍTICO: Incluir company_id
           user_id: user.id,
           status: 'Em Andamento',
+          render_version: 2, // 🔥 NOVO: Versão 2 para alta resolução de PDF
         })
         .select()
         .single();
@@ -511,6 +512,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         postes: [],
         ...(data.client_name && { clientName: data.client_name }),
         ...(data.city && { city: data.city }),
+        render_version: data.render_version || 1, // 🔥 NOVO: Incluir versão de renderização
       };
 
 
@@ -1002,7 +1004,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status,
           created_at,
           updated_at,
-          plan_image_url
+          plan_image_url,
+          render_version
         `)
         .eq('id', budgetId)
         .single();
@@ -1160,6 +1163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         created_at: budgetData.created_at || undefined,
         updated_at: budgetData.updated_at || undefined,
         plan_image_url: budgetData.plan_image_url || undefined,
+        render_version: budgetData.render_version || 1, // 🔥 NOVO: Versão de renderização (default 1)
         posts: postsFormatted
       };
 

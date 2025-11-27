@@ -49,6 +49,7 @@ export interface Orcamento {
   clientName?: string;
   city?: string;
   folderId?: string | null; // ID da pasta onde o orçamento está
+  render_version?: number; // Versão da lógica de renderização (1=legado, 2=alta resolução)
 }
 
 export interface BudgetFolder {
@@ -146,4 +147,5 @@ export interface BudgetDetails {
   updated_at?: string;
   plan_image_url?: string;
   posts: BudgetPostDetail[];
+  render_version?: number; // Versão da lógica de renderização (1=legado, 2=alta resolução)
 }

@@ -205,18 +205,40 @@ export function CanvasVisual({
   const onPageLoadSuccess = (page: any) => {
     const viewport = page.getViewport({ scale: 1 });
     
-    const minScale = 2;
-    const maxScale = 4;
-    const scale = Math.max(minScale, Math.min(maxScale, 1200 / Math.max(viewport.width, viewport.height)));
+    // 🔥 VERSIONAMENTO: Lógica condicional baseada em render_version
+    const renderVersion = budgetDetails?.render_version || 1;
     
-    const finalWidth = viewport.width * scale;
-    const finalHeight = viewport.height * scale;
+    let finalWidth: number;
+    let finalHeight: number;
+    let scale: number;
+    
+    if (renderVersion === 2) {
+      // ✨ VERSÃO 2: Alta resolução - PDF renderizado nativamente em 6000px
+      // Calcular scale para que o PDF tenha exatamente 6000px de largura
+      const targetWidth = 6000;
+      scale = targetWidth / viewport.width;
+      
+      finalWidth = targetWidth;
+      finalHeight = viewport.height * scale;
+      
+      console.log(`[Render V2] PDF em alta resolução: scale=${scale.toFixed(2)}, width=${finalWidth}px, height=${finalHeight.toFixed(0)}px`);
+    } else {
+      // 📦 VERSÃO 1 (LEGADO): Lógica original - PDF pequeno + esticamento CSS
+      const minScale = 2;
+      const maxScale = 4;
+      scale = Math.max(minScale, Math.min(maxScale, 1200 / Math.max(viewport.width, viewport.height)));
+      
+      finalWidth = viewport.width * scale;
+      finalHeight = viewport.height * scale;
+      
+      console.log(`[Render V1] PDF legado: scale=${scale.toFixed(2)}, width=${finalWidth}px, height=${finalHeight}px`);
+    }
 
     setImageDimensions({
       width: finalWidth,
       height: finalHeight,
-        naturalWidth: viewport.width,
-        naturalHeight: viewport.height
+      naturalWidth: viewport.width,
+      naturalHeight: viewport.height
     });
     
     setPdfLoading(false);
@@ -639,10 +661,10 @@ export function CanvasVisual({
                       >
                         <div 
                           style={{
-                            backgroundColor: '#f8f9fa',
-                            padding: '20px',
-                            borderRadius: '8px',
-                            border: '2px solid #dee2e6',
+                            backgroundColor: (budgetDetails?.render_version || 1) === 2 ? 'transparent' : '#f8f9fa',
+                            padding: (budgetDetails?.render_version || 1) === 2 ? '0' : '20px',
+                            borderRadius: (budgetDetails?.render_version || 1) === 2 ? '0' : '8px',
+                            border: (budgetDetails?.render_version || 1) === 2 ? 'none' : '2px solid #dee2e6',
                             pointerEvents: 'none'
                         }}
                       >
@@ -673,7 +695,7 @@ export function CanvasVisual({
                             onLoadError={() => setPdfLoading(false)}
                                   width={imageDimensions?.width || 1200}
                             renderMode="canvas"
-                                  className="shadow-xl border-2 border-gray-300"
+                                  className={(budgetDetails?.render_version || 1) === 2 ? "" : "shadow-xl border-2 border-gray-300"}
                           />
                               </div>
                             )}
