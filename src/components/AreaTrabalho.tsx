@@ -3,7 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import { CanvasVisual } from './CanvasVisual';
 import { PainelConsolidado } from './PainelConsolidado';
 import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../types';
-import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, ChevronUp, ChevronDown, EyeOff, Search } from 'lucide-react';
+import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, Search } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
 import { EditPostModal } from './modals/EditPostModal';
@@ -54,9 +54,6 @@ export function AreaTrabalho() {
   const [searchTerm, setSearchTerm] = useState('');
   const [addingGroup, setAddingGroup] = useState(false);
   const [removingGroup, setRemovingGroup] = useState<string | null>(null);
-  
-  // Estado para controlar se a planta está retraída
-  const [isPlantCollapsed, setIsPlantCollapsed] = useState(false);
   
   // Estado para detectar se é desktop/PC
   const [isDesktop, setIsDesktop] = useState(false);
@@ -478,9 +475,9 @@ export function AreaTrabalho() {
 
   // Visualização Principal ('main')
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col">
       {/* Cabeçalho da Visualização Principal */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+      <div className="bg-white border-b border-gray-200 p-4 mb-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">{currentOrcamento.nome}</h2>
@@ -498,93 +495,57 @@ export function AreaTrabalho() {
         </div>
       </div>
 
-      {/* Canvas - Seção Superior */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden transition-all duration-300 ease-in-out" 
-           style={{height: isPlantCollapsed ? '60px' : (isDesktop ? '500px' : '400px')}}>
-        {/* Cabeçalho da Planta com botão de retrair */}
-        <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center space-x-2">
-            <Package className="h-4 w-4 text-blue-600" />
-            <span className="text-sm font-medium text-gray-700">Planta do Orçamento</span>
-          </div>
-          <button
-            onClick={() => setIsPlantCollapsed(!isPlantCollapsed)}
-            className="flex items-center space-x-1 px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-            title={isPlantCollapsed ? 'Expandir planta' : 'Retrair planta'}
-          >
-            {isPlantCollapsed ? (
-              <>
-                <Eye className="h-4 w-4" />
-                <ChevronDown className="h-3 w-3" />
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-4 w-4" />
-                <ChevronUp className="h-3 w-3" />
-              </>
-            )}
-          </button>
+      {/* Grid de 2 Colunas: Lista (esquerda) e Mapa (direita) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start px-4">
+        {/* Coluna Esquerda - Lista de Postes (cresce dinamicamente) */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <PostListAccordion
+            budgetDetails={budgetDetails}
+            deletingPost={deletingPost}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            addingGroup={addingGroup}
+            removingGroup={removingGroup}
+            handleAddGrupo={handleAddGrupo}
+            handleRemoveGrupo={handleRemoveGrupo}
+            handleDeletePostFromDatabase={handleDeletePostFromDatabase}
+            itemGroups={itemGroups}
+            updateMaterialQuantityInPostGroup={updateMaterialQuantityInPostGroup}
+            materiais={materiais}
+            addLooseMaterialToPost={addLooseMaterialToPost}
+            updateLooseMaterialQuantity={updateLooseMaterialQuantity}
+            removeLooseMaterialFromPost={removeLooseMaterialFromPost}
+          />
         </div>
-        
-        {/* Conteúdo da Planta - só renderiza se não estiver retraída */}
-        {!isPlantCollapsed && (
-          <div style={{height: 'calc(100% - 60px)'}}>
-            <CanvasVisual
-              orcamento={currentOrcamento}
-              budgetDetails={budgetDetails}
-              selectedPoste={selectedPoste}
-              selectedPostDetail={selectedPostDetail}
-              onPosteClick={setSelectedPoste}
-              onPostDetailClick={setSelectedPostDetail}
-              onEditPost={handleEditPost}
-              onAddPoste={addPoste}
-              onUpdatePoste={updatePoste}
-              onUpdatePostCoordinates={updatePostCoordinates}
-              onUploadImage={() => fileInputRef.current?.click()}
-              onDeleteImage={handleDeleteImage}
-              onDeletePoste={handleDeletePoste}
-              onRightClick={handleRightClick}
-              loadingUpload={loadingUpload}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={handleUploadImage}
-              className="hidden"
-              disabled={loadingUpload}
-            />
-          </div>
-        )}
-        
-        {/* Mensagem quando retraída */}
-        {isPlantCollapsed && (
-          <div className="flex items-center justify-center text-sm text-gray-500 py-2">
-            <EyeOff className="h-4 w-4 mr-2" />
-            <span>Planta retraída - Clique no botão acima para expandir</span>
-          </div>
-        )}
-      </div>
 
-      {/* Lista de Postes - Seção Inferior */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
-        <PostListAccordion
-          budgetDetails={budgetDetails}
-          deletingPost={deletingPost}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          addingGroup={addingGroup}
-          removingGroup={removingGroup}
-          handleAddGrupo={handleAddGrupo}
-          handleRemoveGrupo={handleRemoveGrupo}
-          handleDeletePostFromDatabase={handleDeletePostFromDatabase}
-          itemGroups={itemGroups}
-          updateMaterialQuantityInPostGroup={updateMaterialQuantityInPostGroup}
-          materiais={materiais}
-          addLooseMaterialToPost={addLooseMaterialToPost}
-          updateLooseMaterialQuantity={updateLooseMaterialQuantity}
-          removeLooseMaterialFromPost={removeLooseMaterialFromPost}
-        />
+        {/* Coluna Direita - Canvas/Mapa com Sticky */}
+        <div className="sticky top-0 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden h-[calc(100vh-8rem)] max-h-[800px]">
+          <CanvasVisual
+            orcamento={currentOrcamento}
+            budgetDetails={budgetDetails}
+            selectedPoste={selectedPoste}
+            selectedPostDetail={selectedPostDetail}
+            onPosteClick={setSelectedPoste}
+            onPostDetailClick={setSelectedPostDetail}
+            onEditPost={handleEditPost}
+            onAddPoste={addPoste}
+            onUpdatePoste={updatePoste}
+            onUpdatePostCoordinates={updatePostCoordinates}
+            onUploadImage={() => fileInputRef.current?.click()}
+            onDeleteImage={handleDeleteImage}
+            onDeletePoste={handleDeletePoste}
+            onRightClick={handleRightClick}
+            loadingUpload={loadingUpload}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            onChange={handleUploadImage}
+            className="hidden"
+            disabled={loadingUpload}
+          />
+        </div>
       </div>
 
       {/* Modal para Adicionar Poste */}
@@ -930,33 +891,33 @@ function PostListAccordion({
           </div>
         </div>
       ) : postsToDisplay.length === 0 ? (
-        <div className="flex items-center justify-center py-12 text-gray-500">
-          <div className="text-center">
-            <p>Nenhum poste foi adicionado ainda</p>
-            <p className="text-sm mt-1">Adicione uma imagem de planta e clique com o botão direito nela para criar postes</p>
+          <div className="flex items-center justify-center py-12 text-gray-500">
+            <div className="text-center">
+              <p>Nenhum poste foi adicionado ainda</p>
+              <p className="text-sm mt-1">Adicione uma imagem de planta e clique com o botão direito nela para criar postes</p>
+            </div>
           </div>
-        </div>
-      ) : filteredPosts.length === 0 ? (
-        <div className="flex items-center justify-center py-12 text-gray-500">
-          <div className="text-center">
-            <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="font-medium">Nenhum poste encontrado</p>
-            <p className="text-sm mt-1">Tente ajustar os termos de busca</p>
-            <button
-              onClick={() => setPostSearchTerm('')}
-              className="mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm"
-            >
-              Limpar busca
-            </button>
+        ) : filteredPosts.length === 0 ? (
+          <div className="flex items-center justify-center py-12 text-gray-500">
+            <div className="text-center">
+              <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="font-medium">Nenhum poste encontrado</p>
+              <p className="text-sm mt-1">Tente ajustar os termos de busca</p>
+              <button
+                onClick={() => setPostSearchTerm('')}
+                className="mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm"
+              >
+                Limpar busca
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="px-6 pb-6">
-          <Accordion type="single" collapsible className="w-full">
-            {filteredPosts.map((post: any) => {
-              const postName = post.name;
-              const postType = post.post_types?.name;
-              const postGroups = post.post_item_groups;
+        ) : (
+          <div className="px-4 py-3">
+            <Accordion type="single" collapsible className="w-full space-y-2">
+              {filteredPosts.map((post: any) => {
+                const postName = post.name;
+                const postType = post.post_types?.name;
+                const postGroups = post.post_item_groups;
             
             return (
               <AccordionItem key={post.id} value={post.id}>
@@ -1222,8 +1183,18 @@ function PostListAccordion({
                 </AccordionContent>
               </AccordionItem>
               );
-            })}
-          </Accordion>
+              })}
+            </Accordion>
+          </div>
+        )
+      }
+      
+      {/* Rodapé da lista com informações úteis */}
+      {postsToDisplay.length > 0 && (
+        <div className="border-t border-gray-200 bg-gray-50 p-3">
+          <div className="text-xs text-gray-500 text-center">
+            Total: {postsToDisplay.length} {postsToDisplay.length === 1 ? 'poste cadastrado' : 'postes cadastrados'}
+          </div>
         </div>
       )}
     </div>

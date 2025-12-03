@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Trash2, Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Upload, Trash2, Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, Package } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -49,8 +49,6 @@ export function CanvasVisual({
   onRightClick,
   loadingUpload = false
 }: CanvasVisualProps) {
-  const [selectedTipoPoste, setSelectedTipoPoste] = useState<TipoPoste>('600mm');
-  const tiposPoste: TipoPoste[] = ['600mm', '1000mm', '1500mm', '2000mm'];
 
   const containerRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<ReactZoomPanPinchRef>(null);
@@ -263,7 +261,7 @@ export function CanvasVisual({
   const centerOnPDF = () => {
     if (transformRef.current) {
       if (!hasImage || isPDF) {
-        transformRef.current.setTransform(-600, -1050, 0.4, 300, 'easeOutQuad');
+        transformRef.current.setTransform(-1000, -1200, 0.5, 300, 'easeOutQuad');
       } else {
         transformRef.current.resetTransform();
       }
@@ -376,106 +374,106 @@ export function CanvasVisual({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Controles superiores */}
-      <div className="bg-white p-4 border-b flex justify-between items-center">
-        <div className="flex items-center space-x-4">
-          <select
-            value={selectedTipoPoste}
-            onChange={(e) => setSelectedTipoPoste(e.target.value as TipoPoste)}
-            className="px-3 py-2 border rounded-lg"
-            disabled={loadingUpload || imageLoading || pdfLoading}
-          >
-            {tiposPoste.map((tipo) => (
-              <option key={tipo} value={tipo}>{tipo}</option>
-            ))}
-          </select>
-          
-          {/* Controles de PDF */}
-          {isPDF && numPages && numPages > 1 && (
-            <div className="flex items-center space-x-2 border rounded-lg px-2 py-1">
-              <button
-                onClick={() => changePage(-1)}
-                disabled={pageNumber <= 1 || loadingUpload}
-                className="p-1 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-sm text-gray-600 min-w-[80px] text-center">
-                {pageNumber} / {numPages}
-              </span>
-              <button
-                onClick={() => changePage(1)}
-                disabled={pageNumber >= numPages || loadingUpload}
-                className="p-1 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-          
-          {/* Controles de Zoom */}
-          <div className="flex items-center space-x-1 border rounded-lg px-2 py-1">
+      {/* Cabeçalho com título e controles */}
+      <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center space-x-2">
+            <Package className="h-5 w-5 text-blue-600" />
+            <h3 className="text-base font-semibold text-gray-900">Planta do Orçamento</h3>
+          </div>
+          <div className="flex items-center space-x-2">
             <button
-              onClick={() => transformRef.current?.zoomOut()}
+              onClick={onUploadImage}
+              className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-md flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               disabled={loadingUpload || imageLoading || pdfLoading}
-              className="p-1 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Diminuir zoom"
+              title="Fazer upload de nova planta"
             >
-              <ZoomOut className="h-4 w-4" />
+              {loadingUpload ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Enviando...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>Nova Imagem/PDF</span>
+                </>
+              )}
             </button>
             <button
-              onClick={centerOnPDF}
+              onClick={onDeleteImage}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={loadingUpload || imageLoading || pdfLoading}
-              className="p-1 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!hasImage || isPDF ? "Centrar no quadro" : "Resetar zoom"}
+              title="Excluir planta"
             >
-              <RotateCcw className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => transformRef.current?.zoomIn()}
-              disabled={loadingUpload || imageLoading || pdfLoading}
-              className="p-1 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Aumentar zoom"
-            >
-              <ZoomIn className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
             </button>
           </div>
-          
-          <span className="text-sm text-gray-600">
-            {loadingUpload ? 'Processando upload...' : 
-             pdfLoading ? 'Carregando PDF...' :
-             imageLoading ? 'Carregando imagem...' :
-             !hasImage ? 'Clique com o botão direito no quadro branco para adicionar um poste' :
-             isPDF ? 'Clique com o botão direito no PDF ou quadro branco para adicionar um poste' :
-             'Clique com o botão direito na imagem para adicionar um poste'}
-          </span>
         </div>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={onUploadImage}
-            className="px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loadingUpload || imageLoading || pdfLoading}
-          >
-            {loadingUpload ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Enviando...</span>
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4" />
-                <span>Nova Imagem/PDF</span>
-              </>
+        
+        {/* Linha de controles */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            {/* Controles de Zoom */}
+            <div className="flex items-center space-x-0.5 bg-white border border-gray-300 rounded-md">
+              <button
+                onClick={() => transformRef.current?.zoomOut()}
+                disabled={loadingUpload || imageLoading || pdfLoading}
+                className="p-1.5 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed border-r border-gray-300"
+                title="Diminuir zoom"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={centerOnPDF}
+                disabled={loadingUpload || imageLoading || pdfLoading}
+                className="p-1.5 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed border-r border-gray-300"
+                title={!hasImage || isPDF ? "Centrar no quadro" : "Resetar zoom"}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => transformRef.current?.zoomIn()}
+                disabled={loadingUpload || imageLoading || pdfLoading}
+                className="p-1.5 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Aumentar zoom"
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            
+            {/* Controles de PDF */}
+            {isPDF && numPages && numPages > 1 && (
+              <div className="flex items-center space-x-0.5 bg-white border border-gray-300 rounded-md">
+                <button
+                  onClick={() => changePage(-1)}
+                  disabled={pageNumber <= 1 || loadingUpload}
+                  className="p-1.5 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed border-r border-gray-300"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <span className="text-xs text-gray-600 px-2 min-w-[60px] text-center">
+                  {pageNumber}/{numPages}
+                </span>
+                <button
+                  onClick={() => changePage(1)}
+                  disabled={pageNumber >= numPages || loadingUpload}
+                  className="p-1.5 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed border-l border-gray-300"
+                  title="Próxima página"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
-          </button>
-          <button
-            onClick={onDeleteImage}
-            className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loadingUpload || imageLoading || pdfLoading}
-          >
-            <Trash2 className="h-5 w-5" />
-            <span>Excluir Planta</span>
-          </button>
+          </div>
+          
+          <div className="text-xs text-gray-500 italic">
+            {loadingUpload ? 'Processando...' : 
+             pdfLoading ? 'Carregando PDF...' :
+             imageLoading ? 'Carregando...' :
+             'Clique direito para adicionar poste'}
+          </div>
         </div>
       </div>
 
@@ -491,9 +489,9 @@ export function CanvasVisual({
             ref={transformRef}
             minScale={0.1}
             maxScale={5}
-            initialScale={hasImage && !isPDF ? 0.8 : 0.4}
-            initialPositionX={hasImage && !isPDF ? 0 : -600}
-            initialPositionY={hasImage && !isPDF ? 0 : -1050}
+            initialScale={hasImage && !isPDF ? 0.8 : 0.5}
+            initialPositionX={hasImage && !isPDF ? 0 : -1000}
+            initialPositionY={hasImage && !isPDF ? 0 : -1200}
             wheel={{ step: 0.1 }}
             panning={{ disabled: false }}
             doubleClick={{ disabled: false }}
