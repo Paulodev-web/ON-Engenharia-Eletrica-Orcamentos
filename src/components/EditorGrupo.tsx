@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Minus, Save, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Search, Plus, Minus, Save, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X, Trash2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAlertDialog } from '../hooks/useAlertDialog';
 import { AlertDialog } from './ui/alert-dialog';
@@ -178,7 +178,27 @@ export function EditorGrupo() {
   };
 
   const handleRemoveMaterial = (materialId: string) => {
-    setMateriaisGrupo(materiaisGrupo.filter(mg => mg.materialId !== materialId));
+    const material = materiais.find(m => m.id === materialId);
+    const materialName = material?.descricao || 'este material';
+    
+    if (currentGroup) {
+      // Se estiver editando um grupo existente, mostrar aviso sobre efeito cascata
+      alertDialog.showConfirm(
+        'Remover Material do Grupo',
+        `Tem certeza que deseja remover "${materialName}" deste grupo? Esta alteração será aplicada automaticamente em TODOS os orçamentos que utilizam este grupo.`,
+        () => {
+          setMateriaisGrupo(materiaisGrupo.filter(mg => mg.materialId !== materialId));
+        },
+        {
+          type: 'destructive',
+          confirmText: 'Remover',
+          cancelText: 'Cancelar'
+        }
+      );
+    } else {
+      // Se estiver criando um novo grupo, remover diretamente
+      setMateriaisGrupo(materiaisGrupo.filter(mg => mg.materialId !== materialId));
+    }
   };
 
   const handleQuantidadeChange = (materialId: string, quantidade: number) => {
@@ -269,6 +289,8 @@ export function EditorGrupo() {
           company_id: currentCompanyId,
           materials: materialsData
         };
+        
+        console.log('🔄 Atualizando grupo e sincronizando com orçamentos...');
         await updateGroup(currentGroup.id, groupData);
         
         // Identificar concessionárias adicionais selecionadas (que não são a atual)
@@ -290,7 +312,7 @@ export function EditorGrupo() {
         setCurrentGroup(null);
         setCurrentView('grupos');
         
-        let message = 'O grupo foi atualizado com sucesso.';
+        let message = 'O grupo foi atualizado com sucesso. Todos os orçamentos que utilizam este grupo foram automaticamente atualizados!';
         if (additionalCompanyIds.length > 0) {
           message += ` ${additionalCompanyIds.length} cópia(s) ${additionalCompanyIds.length > 1 ? 'foram criadas' : 'foi criada'} para ${additionalCompanyIds.length > 1 ? 'outras concessionárias' : 'outra concessionária'} selecionada${additionalCompanyIds.length > 1 ? 's' : ''}.`;
         }
@@ -467,6 +489,22 @@ export function EditorGrupo() {
           {currentGroup ? `Editar Grupo: ${currentGroup.nome}` : 'Novo Grupo de Itens'}
         </h3>
 
+        {/* Alerta sobre efeito cascata ao editar */}
+        {currentGroup && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <div className="text-blue-600 mt-0.5">ℹ️</div>
+              <div className="flex-1 text-sm text-blue-800">
+                <p className="font-medium mb-1">Atualização em Cascata</p>
+                <p className="text-xs text-blue-700">
+                  Alterações neste grupo serão aplicadas automaticamente em todos os orçamentos que o utilizam. 
+                  Isso inclui adição, remoção e alteração de quantidades de materiais.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -569,9 +607,16 @@ export function EditorGrupo() {
         </div>
 
         <div className="border-t pt-4">
-          <h4 className="text-md font-medium text-gray-900 mb-3">
-            Materiais do Grupo ({materiaisGrupo.length})
-          </h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-md font-medium text-gray-900">
+              Materiais do Grupo ({materiaisGrupo.length})
+            </h4>
+            {materiaisGrupo.length > 0 && (
+              <span className="text-xs text-gray-500">
+                Use o ícone 🗑️ para remover materiais
+              </span>
+            )}
+          </div>
 
           {materiaisGrupo.length === 0 ? (
             <p className="text-gray-500 text-sm text-center py-8">
@@ -593,7 +638,7 @@ export function EditorGrupo() {
                   if (!material) return null;
 
                   return (
-                    <div key={materialId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div key={materialId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group hover:bg-gray-100 transition-colors">
                       <div className="flex-1">
                         <div className="font-medium text-sm text-gray-900">
                           {material.descricao}
@@ -614,7 +659,8 @@ export function EditorGrupo() {
                             return newState;
                           });
                         }}
-                        className="p-1 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                        disabled={saving}
+                        className="p-1 text-gray-600 hover:bg-gray-200 rounded-full transition-colors disabled:opacity-50"
                         title="Diminuir 1"
                       >
                         <Minus className="h-4 w-4" />
@@ -625,7 +671,8 @@ export function EditorGrupo() {
                         value={inputStates[materialId] ?? quantidade.toString().replace('.', ',')}
                         onChange={(e) => handleQuantidadeInputChange(materialId, e.target.value)}
                         onBlur={(e) => handleQuantidadeBlur(materialId, e.target.value)}
-                        className="w-20 text-center px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        disabled={saving}
+                        className="w-20 text-center px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         placeholder="1"
                       />
                       
@@ -638,10 +685,20 @@ export function EditorGrupo() {
                             return newState;
                           });
                         }}
-                        className="p-1 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                        disabled={saving}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded-full transition-colors disabled:opacity-50"
                         title="Aumentar 1"
                       >
                         <Plus className="h-4 w-4" />
+                      </button>
+                      
+                      <button
+                        onClick={() => handleRemoveMaterial(materialId)}
+                        disabled={saving}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 ml-2"
+                        title="Remover material do grupo"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -664,7 +721,7 @@ export function EditorGrupo() {
             )}
             <span>
               {saving 
-                ? (currentGroup ? 'Atualizando...' : 'Salvando...') 
+                ? (currentGroup ? 'Atualizando grupo e sincronizando orçamentos...' : 'Salvando...') 
                 : (currentGroup ? 'Atualizar Grupo' : 'Salvar Grupo de Itens')
               }
             </span>
