@@ -11,7 +11,7 @@ interface PostIconProps {
   postType?: string;
   onClick?: () => void;
   onDoubleClick?: () => void;
-  onLeftClick?: () => void; // Nova prop para clique esquerdo (editar)
+  onLeftClick?: (event: React.MouseEvent) => void; // Nova prop para clique esquerdo (editar)
   onDragStart?: (e: React.MouseEvent) => void;
   onDrag?: (e: React.MouseEvent) => void;
   onDragEnd?: (e: React.MouseEvent) => void;
@@ -86,7 +86,7 @@ export function PostIcon({
     
     // Se tiver onLeftClick definido, usar ele para clique esquerdo normal
     if (onLeftClick) {
-      onLeftClick();
+      onLeftClick(e);
     } else if (onClick) {
       // Fallback para onClick antigo (compatibilidade)
       onClick();

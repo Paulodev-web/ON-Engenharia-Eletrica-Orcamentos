@@ -311,211 +311,259 @@ export function Dashboard() {
     setDropTargetFolder(null);
   };
 
-  // Componente de Card de Orçamento
+  // Componente de Card de Orçamento - Design Neutro e Limpo
   const BudgetCard = ({ budget }: { budget: Orcamento }) => (
     <div
       draggable
       onDragStart={() => handleDragStart(budget)}
       onDragEnd={handleDragEnd}
       onClick={() => handleAbrirOrcamento(budget.id)}
-      className={`bg-white rounded-lg border-2 p-4 cursor-move hover:shadow-lg transition-all ${
-        draggedBudget?.id === budget.id ? 'opacity-50 border-blue-400' : 'border-gray-200'
+      className={`group relative bg-white rounded-lg border transition-all duration-200 cursor-move ${
+        draggedBudget?.id === budget.id 
+          ? 'opacity-50 scale-95 border-gray-400 shadow-lg' 
+          : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
       }`}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-gray-900 truncate">
-            {budget.nome}
-          </h3>
-          {budget.clientName && (
-            <p className="text-sm text-gray-600 truncate">
-              Cliente: {budget.clientName}
-            </p>
+      <div className="p-4">
+        {/* Cabeçalho com Status */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1 min-w-0 pr-3">
+            <h3 className="text-base font-semibold text-gray-900 mb-1 truncate">
+              {budget.nome}
+            </h3>
+            {budget.clientName && (
+              <p className="text-sm text-gray-600 truncate">
+                {budget.clientName}
+              </p>
+            )}
+          </div>
+          {budget.status === 'Finalizado' ? (
+            <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md bg-green-50 text-green-700 border border-green-200">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Finalizado
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+              <Clock className="h-3 w-3 mr-1" />
+              Em Andamento
+            </span>
           )}
-          {budget.city && (
-            <p className="text-sm text-gray-600 truncate">
-              Cidade: {budget.city}
-            </p>
+        </div>
+
+        {/* Informações */}
+        <div className="flex items-center justify-between text-sm text-gray-600 mb-3 pb-3 border-b border-gray-100">
+          <div className="flex items-center">
+            <Building2 className="h-3.5 w-3.5 mr-1.5" />
+            <span>{getConcessionariaNome(budget.concessionariaId)}</span>
+          </div>
+          <div className="flex items-center">
+            <Calendar className="h-3.5 w-3.5 mr-1.5" />
+            <span>{formatDate(budget.dataModificacao)}</span>
+          </div>
+        </div>
+
+        {/* Ações */}
+        <div className="flex items-center justify-end space-x-1">
+          {budget.status !== 'Finalizado' ? (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditBudget(budget);
+                }}
+                className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                title="Editar"
+              >
+                <Edit className="h-4 w-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDuplicateBudget(budget);
+                }}
+                disabled={isDuplicating === budget.id}
+                className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                title="Duplicar"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFinalize(budget);
+                }}
+                disabled={isFinalizing === budget.id}
+                className="px-3 py-1.5 text-xs font-medium bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors disabled:opacity-50"
+                title="Finalizar"
+              >
+                {isFinalizing === budget.id ? 'Finalizando...' : 'Finalizar'}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteBudget(budget);
+                }}
+                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                title="Excluir"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDuplicateBudget(budget);
+                }}
+                disabled={isDuplicating === budget.id}
+                className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                title="Duplicar"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteBudget(budget);
+                }}
+                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                title="Excluir"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
           )}
         </div>
-        {budget.status === 'Finalizado' ? (
-          <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 flex-shrink-0">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Finalizado
-          </span>
-        ) : (
-          <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 flex-shrink-0">
-            <Clock className="h-3 w-3 mr-1" />
-            Em Andamento
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between text-sm text-gray-600 mb-3">
-        <div className="flex items-center">
-          <Building2 className="h-4 w-4 mr-1" />
-          <span>{getConcessionariaNome(budget.concessionariaId)}</span>
-        </div>
-        <div className="flex items-center">
-          <Calendar className="h-4 w-4 mr-1" />
-          <span>{formatDate(budget.dataModificacao)}</span>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-200">
-        {budget.status !== 'Finalizado' ? (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEditBudget(budget);
-              }}
-              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-              title="Editar"
-            >
-              <Edit className="h-4 w-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDuplicateBudget(budget);
-              }}
-              disabled={isDuplicating === budget.id}
-              className="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition-colors disabled:opacity-50"
-              title="Duplicar"
-            >
-              <Copy className="h-4 w-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleFinalize(budget);
-              }}
-              disabled={isFinalizing === budget.id}
-              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50"
-              title="Finalizar"
-            >
-              {isFinalizing === budget.id ? 'Finalizando...' : 'Finalizar'}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteBudget(budget);
-              }}
-              className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-              title="Excluir"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDuplicateBudget(budget);
-              }}
-              disabled={isDuplicating === budget.id}
-              className="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition-colors disabled:opacity-50"
-              title="Duplicar"
-            >
-              <Copy className="h-4 w-4" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteBudget(budget);
-              }}
-              className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-              title="Excluir"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
 
-  // Componente de Pasta
+  // Componente de Pasta - Design Neutro e Integrado
   const FolderCard = ({ folderId, folderName, folderColor }: { folderId: string; folderName: string; folderColor?: string }) => {
     const budgetsInFolder = budgetsByFolder[folderId] || [];
     const isExpanded = expandedFolderId === folderId;
     const isDropTarget = dropTargetFolder === folderId;
 
     return (
-      <div className="mb-6">
+      <div className="mb-4">
         <div
           onDragOver={(e) => handleDragOver(e, folderId)}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e, folderId)}
-          className={`bg-white rounded-lg border-2 transition-all ${
-            isDropTarget ? 'border-blue-500 bg-blue-50 shadow-lg' : 'border-gray-200'
+          className={`bg-white rounded-lg border transition-all ${
+            isDropTarget 
+              ? 'border-2 border-gray-400 bg-gray-50 shadow-md' 
+              : 'border border-gray-200 hover:border-gray-300'
           }`}
         >
           {/* Cabeçalho da Pasta */}
-          <div className="flex items-center justify-between p-4 cursor-pointer" onClick={() => setExpandedFolderId(isExpanded ? null : folderId)}>
-            <div className="flex items-center space-x-3">
+          <div 
+            className="flex items-center justify-between p-4 cursor-pointer"
+            onClick={() => setExpandedFolderId(isExpanded ? null : folderId)}
+          >
+            <div className="flex items-center space-x-3 flex-1">
               {isExpanded ? (
-                <FolderOpen className="h-6 w-6" style={{ color: folderColor }} fill={folderColor} />
+                <FolderOpen 
+                  className="h-5 w-5 flex-shrink-0" 
+                  style={{ color: folderColor || '#6B7280' }} 
+                />
               ) : (
-                <Folder className="h-6 w-6" style={{ color: folderColor }} fill={folderColor} />
+                <Folder 
+                  className="h-5 w-5 flex-shrink-0" 
+                  style={{ color: folderColor || '#6B7280' }} 
+                />
               )}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{folderName}</h3>
-                <p className="text-sm text-gray-600">
-                  {budgetsInFolder.length} {budgetsInFolder.length === 1 ? 'orçamento' : 'orçamentos'}
-                </p>
+              
+              <div className="flex-1 min-w-0 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 truncate">
+                    {folderName}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {budgetsInFolder.length} {budgetsInFolder.length === 1 ? 'orçamento' : 'orçamentos'}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <div className="relative">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenFolderMenu(openFolderMenu === folderId ? null : folderId);
-                  }}
-                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                >
-                  <MoreVertical className="h-5 w-5" />
-                </button>
-                
-                {/* Menu da Pasta */}
-                {openFolderMenu === folderId && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+
+            {/* Menu de Ações */}
+            <div className="flex items-center space-x-2 relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenFolderMenu(openFolderMenu === folderId ? null : folderId);
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+              
+              {/* Dropdown Menu */}
+              {openFolderMenu === folderId && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-20" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenFolderMenu(null);
+                    }}
+                  ></div>
+                  
+                  <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 overflow-hidden">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleEditFolder(folderId, folderName, folderColor);
                       }}
-                      className="w-full flex items-center space-x-2 px-4 py-2 text-left text-gray-700 hover:bg-gray-50"
+                      className="w-full flex items-center space-x-2 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
                     >
                       <FolderEdit className="h-4 w-4" />
                       <span>Renomear</span>
                     </button>
+                    <div className="border-t border-gray-100"></div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteFolder(folderId, folderName);
                       }}
-                      className="w-full flex items-center space-x-2 px-4 py-2 text-left text-red-600 hover:bg-red-50"
+                      className="w-full flex items-center space-x-2 px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
                       <span>Excluir</span>
                     </button>
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
           </div>
 
           {/* Conteúdo da Pasta (Expandido) */}
-          {isExpanded && budgetsInFolder.length > 0 && (
-            <div className="px-4 pb-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {budgetsInFolder.map(budget => (
-                  <BudgetCard key={budget.id} budget={budget} />
-                ))}
+          {isExpanded && (
+            <div className="px-4 pb-4 border-t border-gray-100">
+              {budgetsInFolder.length > 0 ? (
+                <div className="pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {budgetsInFolder.map(budget => (
+                      <BudgetCard key={budget.id} budget={budget} />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 border border-dashed border-gray-200 rounded-lg bg-gray-50 mt-4">
+                  <FileText className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Nenhum orçamento</p>
+                  <p className="text-xs text-gray-400 mt-1">Arraste orçamentos para cá</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Indicador de Drop Target */}
+          {isDropTarget && (
+            <div className="absolute inset-0 bg-gray-900 bg-opacity-5 pointer-events-none flex items-center justify-center border-2 border-gray-400 rounded-lg">
+              <div className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                Soltar aqui
               </div>
             </div>
           )}
@@ -525,169 +573,182 @@ export function Dashboard() {
   };
 
   return (
-    <div className="flex flex-col h-full space-y-6">
-      <div className="flex justify-between items-center flex-shrink-0">
-        <h2 className="text-2xl font-bold text-gray-900">Meus Orçamentos</h2>
+    <div className="space-y-5">
+      {/* Cabeçalho */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Meus Orçamentos</h2>
+          <p className="text-sm text-gray-500 mt-1">Gerencie seus projetos</p>
+        </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={handleCreateFolder}
-            className="flex items-center space-x-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+            className="flex items-center space-x-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
           >
-            <Folder className="h-5 w-5" />
+            <Folder className="h-4 w-4" />
             <span>Nova Pasta</span>
           </button>
           <button
             onClick={() => setShowBudgetModal(true)}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center space-x-2 bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
             <span>Novo Orçamento</span>
           </button>
         </div>
       </div>
 
-      {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
+      {/* Estatísticas - Design Neutro */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total de Orçamentos</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
+              <p className="text-xs text-gray-500 mb-1">Total</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <BarChart3 className="h-6 w-6 text-blue-600" />
+            <div className="p-2.5 bg-gray-50 rounded-lg">
+              <BarChart3 className="h-5 w-5 text-gray-600" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Em Andamento</p>
-              <p className="text-2xl font-bold text-yellow-600 mt-1">{stats.emAndamento}</p>
+              <p className="text-xs text-gray-500 mb-1">Em Andamento</p>
+              <p className="text-2xl font-bold text-amber-600">{stats.emAndamento}</p>
             </div>
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <Clock className="h-6 w-6 text-yellow-600" />
+            <div className="p-2.5 bg-amber-50 rounded-lg">
+              <Clock className="h-5 w-5 text-amber-600" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Finalizados</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{stats.finalizados}</p>
+              <p className="text-xs text-gray-500 mb-1">Finalizados</p>
+              <p className="text-2xl font-bold text-green-600">{stats.finalizados}</p>
             </div>
-            <div className="p-3 bg-green-100 rounded-lg">
-              <CheckCircle className="h-6 w-6 text-green-600" />
+            <div className="p-2.5 bg-green-50 rounded-lg">
+              <CheckCircle className="h-5 w-5 text-green-600" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Taxa de Conclusão</p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">{stats.percentualFinalizacao}%</p>
+              <p className="text-xs text-gray-500 mb-1">Taxa de Conclusão</p>
+              <p className="text-2xl font-bold text-gray-700">{stats.percentualFinalizacao}%</p>
             </div>
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <TrendingUp className="h-6 w-6 text-purple-600" />
+            <div className="p-2.5 bg-gray-50 rounded-lg">
+              <TrendingUp className="h-5 w-5 text-gray-600" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Barra de Busca e Filtros */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-4">
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="flex flex-col md:flex-row gap-3">
+          {/* Barra de Busca */}
           <div className="flex-1 relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
+              <Search className="h-4 w-4 text-gray-400" />
             </div>
             <input
               type="text"
               placeholder="Buscar por nome do projeto, cliente ou cidade..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
 
+          {/* Botão de Filtros */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               hasActiveFilters 
-                ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-gray-900 text-white hover:bg-gray-800' 
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
             }`}
           >
-            <Filter className="h-5 w-5" />
+            <Filter className="h-4 w-4" />
             <span>Filtros</span>
             {hasActiveFilters && (
-              <span className="bg-white text-blue-600 text-xs font-bold px-2 py-0.5 rounded-full">
+              <span className="bg-white text-gray-900 text-xs font-bold px-2 py-0.5 rounded-full">
                 {(statusFilter !== 'all' ? 1 : 0) + (concessionariaFilter !== 'all' ? 1 : 0)}
               </span>
             )}
           </button>
         </div>
 
+        {/* Painel de Filtros Expandido */}
         {showFilters && (
-          <div className="pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status do Projeto
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'Em Andamento' | 'Finalizado')}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">Todos</option>
-                <option value="Em Andamento">Em Andamento</option>
-                <option value="Finalizado">Finalizado</option>
-              </select>
-            </div>
+          <div className="pt-4 mt-4 border-t border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Status */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Status do Projeto
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as 'all' | 'Em Andamento' | 'Finalizado')}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
+                >
+                  <option value="all">Todos os Status</option>
+                  <option value="Em Andamento">Em Andamento</option>
+                  <option value="Finalizado">Finalizado</option>
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Concessionária
-              </label>
-              <select
-                value={concessionariaFilter}
-                onChange={(e) => setConcessionariaFilter(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">Todas</option>
-                {concessionarias.map((conc) => (
-                  <option key={conc.id} value={conc.id}>
-                    {conc.sigla} - {conc.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {/* Concessionária */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Concessionária
+                </label>
+                <select
+                  value={concessionariaFilter}
+                  onChange={(e) => setConcessionariaFilter(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
+                >
+                  <option value="all">Todas as Concessionárias</option>
+                  {concessionarias.map((conc) => (
+                    <option key={conc.id} value={conc.id}>
+                      {conc.sigla} - {conc.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="flex items-end">
-              <button
-                onClick={handleClearFilters}
-                disabled={!hasActiveFilters}
-                className="w-full px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Limpar Filtros
-              </button>
+              {/* Botão Limpar */}
+              <div className="flex items-end">
+                <button
+                  onClick={handleClearFilters}
+                  disabled={!hasActiveFilters}
+                  className="w-full px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Limpar Filtros
+                </button>
+              </div>
             </div>
           </div>
         )}
 
+        {/* Contador de Resultados */}
         {hasActiveFilters && (
-          <div className="pt-2 border-t border-gray-200">
+          <div className="pt-3 mt-3 border-t border-gray-200">
             <p className="text-sm text-gray-600">
               Mostrando <span className="font-semibold text-gray-900">{filteredBudgets.length}</span> de{' '}
               <span className="font-semibold text-gray-900">{budgets.length}</span> orçamentos
@@ -696,17 +757,16 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Conteúdo Principal - Pastas e Orçamentos */}
-      <div className="flex-1 overflow-auto">
-        {loadingBudgets || loadingFolders ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="flex items-center space-x-2">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-              <span className="text-gray-500">Carregando...</span>
-            </div>
+      {/* Conteúdo Principal */}
+      {loadingBudgets || loadingFolders ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">Carregando...</p>
           </div>
-        ) : (
-          <div className="space-y-6">
+        </div>
+      ) : (
+        <div className="space-y-4">
             {/* Pastas */}
             {folders.map(folder => (
               <FolderCard
@@ -717,65 +777,81 @@ export function Dashboard() {
               />
             ))}
 
-            {/* Orçamentos Sem Pasta */}
-            {budgetsByFolder['no-folder'].length > 0 && (
-              <div>
-                <div
-                  onDragOver={(e) => handleDragOver(e, null)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, null)}
-                  className={`bg-white rounded-lg border-2 p-4 transition-all ${
-                    dropTargetFolder === null ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3 mb-4">
-                    <FileText className="h-6 w-6 text-gray-600" />
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Sem pasta</h3>
-                      <p className="text-sm text-gray-600">
-                        {budgetsByFolder['no-folder'].length} {budgetsByFolder['no-folder'].length === 1 ? 'orçamento' : 'orçamentos'}
-                      </p>
-                    </div>
+          {/* Orçamentos Sem Pasta */}
+          {budgetsByFolder['no-folder'].length > 0 && (
+            <div
+              onDragOver={(e) => handleDragOver(e, null)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, null)}
+              className={`relative bg-white border rounded-lg transition-all ${
+                dropTargetFolder === null && draggedBudget
+                  ? 'border-gray-400 border-2 bg-gray-50' 
+                  : 'border-gray-200'
+              }`}
+            >
+              <div className="p-4">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-gray-50 rounded-lg">
+                    <FileText className="h-5 w-5 text-gray-600" />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {budgetsByFolder['no-folder'].map(budget => (
-                      <BudgetCard key={budget.id} budget={budget} />
-                    ))}
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Sem Pasta</h3>
+                    <p className="text-xs text-gray-500">
+                      {budgetsByFolder['no-folder'].length} {budgetsByFolder['no-folder'].length === 1 ? 'orçamento' : 'orçamentos'}
+                    </p>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Mensagem quando não há orçamentos */}
-            {budgets.length === 0 && (
-              <div className="text-center py-12">
-                <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">Nenhum orçamento encontrado.</p>
-                <button
-                  onClick={() => setShowBudgetModal(true)}
-                  className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Criar seu primeiro orçamento
-                </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {budgetsByFolder['no-folder'].map(budget => (
+                    <BudgetCard key={budget.id} budget={budget} />
+                  ))}
+                </div>
               </div>
-            )}
 
-            {/* Mensagem quando não há resultados com os filtros */}
-            {budgets.length > 0 && filteredBudgets.length === 0 && (
-              <div className="text-center py-12">
-                <Search className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg font-medium">Nenhum orçamento encontrado com os filtros aplicados.</p>
-                <button
-                  onClick={handleClearFilters}
-                  className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Limpar filtros
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+              {dropTargetFolder === null && draggedBudget && (
+                <div className="absolute inset-0 bg-gray-900 bg-opacity-5 pointer-events-none flex items-center justify-center border-2 border-gray-400 rounded-lg">
+                  <div className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                    Soltar aqui
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mensagem quando não há orçamentos */}
+          {budgets.length === 0 && (
+            <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-200">
+              <FileText className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum orçamento ainda</h3>
+              <p className="text-sm text-gray-500 mb-4">Comece criando seu primeiro orçamento</p>
+              <button
+                onClick={() => setShowBudgetModal(true)}
+                className="inline-flex items-center space-x-2 bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Criar Orçamento</span>
+              </button>
+            </div>
+          )}
+
+          {/* Mensagem quando não há resultados com filtros */}
+          {budgets.length > 0 && filteredBudgets.length === 0 && (
+            <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-200">
+              <Search className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum resultado encontrado</h3>
+              <p className="text-sm text-gray-500 mb-4">Tente ajustar seus filtros</p>
+              <button
+                onClick={handleClearFilters}
+                className="inline-flex items-center space-x-2 bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+              >
+                <X className="h-4 w-4" />
+                <span>Limpar Filtros</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modais */}
       {showBudgetModal && (

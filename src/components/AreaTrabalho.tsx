@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useApp } from '../contexts/AppContext';
 import { CanvasVisual } from './CanvasVisual';
 import { PainelConsolidado } from './PainelConsolidado';
-import { Poste, TipoPoste, BudgetDetails, Material, PostMaterial } from '../types';
+import { Poste, TipoPoste, BudgetDetails, BudgetPostDetail, Material, PostMaterial } from '../types';
 import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, Search } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
@@ -48,12 +48,16 @@ export function AreaTrabalho() {
   // Estado de visualização local
   const [activeView, setActiveView] = useState<'main' | 'consolidation'>('main');
   const [selectedPoste, setSelectedPoste] = useState<Poste | null>(null);
-  const [selectedPostDetail, setSelectedPostDetail] = useState<any | null>(null);
+  const [selectedPostDetail, setSelectedPostDetail] = useState<BudgetPostDetail | null>(null);
   const [deletingPost, setDeletingPost] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [addingGroup, setAddingGroup] = useState(false);
   const [removingGroup, setRemovingGroup] = useState<string | null>(null);
+  const [copiedPostDetail, setCopiedPostDetail] = useState<BudgetPostDetail | null>(null);
+  const [capturedPastePoints, setCapturedPastePoints] = useState<Array<{ x: number; y: number }>>([]);
+  const [isPastingPost, setIsPastingPost] = useState(false);
+  const pasteSequenceRef = useRef(1);
   
   // Estado para detectar se é desktop/PC
   const [isDesktop, setIsDesktop] = useState(false);
@@ -79,6 +83,171 @@ export function AreaTrabalho() {
     
     return () => window.removeEventListener('resize', checkIsDesktop);
   }, []);
+
+
+  const buildIncrementedPostName = useCallback((baseName: string, offset: number) => {
+    const match = baseName.match(/(\d+)(?!.*\d)/);
+    if (!match || match.index === undefined) {
+      return `${baseName.trim()} ${offset}`;
+    }
+
+    const currentNumber = parseInt(match[1], 10);
+    if (Number.isNaN(currentNumber)) {
+      return `${baseName.trim()} ${offset}`;
+    }
+
+    const nextNumber = String(currentNumber + offset).padStart(match[1].length, '0');
+    return `${baseName.slice(0, match.index)}${nextNumber}${baseName.slice(match.index + match[1].length)}`;
+  }, []);
+
+  const createCopiedPostAt = useCallback(async (coords: { x: number; y: number }) => {
+    if (!copiedPostDetail || !currentOrcamento?.id) {
+      return;
+    }
+
+    const postTypeId = copiedPostDetail.post_types?.id;
+    if (!postTypeId) {
+      alertDialog.showError(
+        'Tipo de Poste não encontrado',
+        'Não foi possível copiar este poste porque ele não possui um tipo associado.'
+      );
+      return;
+    }
+
+    const sequence = pasteSequenceRef.current;
+    pasteSequenceRef.current += 1;
+    const postName = buildIncrementedPostName(copiedPostDetail.name, sequence);
+
+    const newPostId = await addPostToBudget({
+      budget_id: currentOrcamento.id,
+      post_type_id: postTypeId,
+      name: postName,
+      x_coord: coords.x,
+      y_coord: coords.y,
+      skipPostTypeMaterial: true,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const groupTemplateIds = copiedPostDetail.post_item_groups
+      .map(group => group.template_id)
+      .filter((id): id is string => Boolean(id));
+
+    for (const groupId of groupTemplateIds) {
+      try {
+        await addGroupToPost(groupId, newPostId);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (error) {
+        console.error(`Erro ao copiar grupo ${groupId}:`, error);
+      }
+    }
+
+    for (const material of copiedPostDetail.post_materials) {
+      try {
+        await addLooseMaterialToPost(
+          newPostId,
+          material.material_id,
+          material.quantity,
+          material.price_at_addition
+        );
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (error) {
+        console.error(`Erro ao copiar material ${material.material_id}:`, error);
+      }
+    }
+  }, [
+    addGroupToPost,
+    addLooseMaterialToPost,
+    addPostToBudget,
+    alertDialog,
+    buildIncrementedPostName,
+    copiedPostDetail,
+    currentOrcamento?.id
+  ]);
+
+  const handleCapturePastePoint = useCallback((coords: { x: number; y: number }) => {
+    if (!copiedPostDetail) {
+      return;
+    }
+
+    setCapturedPastePoints(prev => [...prev, coords]);
+  }, [copiedPostDetail]);
+
+  const handlePasteCapturedPoints = useCallback(async () => {
+    if (!copiedPostDetail || !currentOrcamento?.id || isPastingPost) {
+      return;
+    }
+
+    if (capturedPastePoints.length === 0) {
+      return;
+    }
+
+    setIsPastingPost(true);
+    try {
+      const pointsToPaste = [...capturedPastePoints];
+      setCapturedPastePoints([]);
+      await Promise.all(pointsToPaste.map(coords => createCopiedPostAt(coords)));
+    } catch (error) {
+      console.error('Falha ao colar postes:', error);
+      alertDialog.showError(
+        'Erro ao Colar Poste',
+        'Ocorreu um erro ao copiar o poste. Tente novamente.'
+      );
+    } finally {
+      setIsPastingPost(false);
+    }
+  }, [
+    alertDialog,
+    capturedPastePoints,
+    copiedPostDetail,
+    createCopiedPostAt,
+    currentOrcamento?.id,
+    isPastingPost
+  ]);
+
+  // Atalhos de teclado para copiar/colar postes
+  useEffect(() => {
+    const isEditableElement = (element: HTMLElement | null) => {
+      if (!element) return false;
+      const tagName = element.tagName.toLowerCase();
+      return (
+        tagName === 'input' ||
+        tagName === 'textarea' ||
+        tagName === 'select' ||
+        element.isContentEditable
+      );
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableElement(event.target as HTMLElement | null)) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (event.ctrlKey && key === 'c') {
+        if (selectedPostDetail) {
+          setCopiedPostDetail(selectedPostDetail);
+          setCapturedPastePoints([]);
+          pasteSequenceRef.current = 1;
+          event.preventDefault();
+        }
+      }
+
+      if (event.ctrlKey && key === 'v') {
+        if (copiedPostDetail && capturedPastePoints.length > 0) {
+          event.preventDefault();
+          handlePasteCapturedPoints();
+        }
+      }
+
+      if (key === 'escape' && capturedPastePoints.length > 0) {
+        setCapturedPastePoints([]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [capturedPastePoints.length, copiedPostDetail, handlePasteCapturedPoints, selectedPostDetail]);
 
   // Efeito principal e unificado para carregar TODOS os dados da AreaTrabalho
   useEffect(() => {
@@ -535,6 +704,8 @@ export function AreaTrabalho() {
             onDeleteImage={handleDeleteImage}
             onDeletePoste={handleDeletePoste}
             onRightClick={handleRightClick}
+            onCanvasCtrlClick={handleCapturePastePoint}
+            capturedPastePoints={capturedPastePoints}
             loadingUpload={loadingUpload}
           />
           <input

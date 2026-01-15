@@ -61,7 +61,7 @@ interface AppContextType {
   
   // Funções de tipos de poste
   fetchPostTypes: () => Promise<void>;
-  addPostToBudget: (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; }) => Promise<string>;
+  addPostToBudget: (newPostData: { budget_id: string; post_type_id: string; name: string; x_coord: number; y_coord: number; skipPostTypeMaterial?: boolean; }) => Promise<string>;
   addGroupToPost: (groupId: string, postId: string) => Promise<void>;
   deletePostFromBudget: (postId: string) => Promise<void>;
   updatePostCoordinates: (postId: string, x: number, y: number) => Promise<void>;
@@ -649,6 +649,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           user_id: user.id,
           status: 'Em Andamento', // Sempre iniciar como "Em Andamento"
           plan_image_url: originalBudget.plan_image_url, // Copiar URL da imagem
+          render_version: originalBudget.render_version || 1, // 🔥 Copiar versão de renderização do PDF (tipo 1 ou 2)
         })
         .select()
         .single();

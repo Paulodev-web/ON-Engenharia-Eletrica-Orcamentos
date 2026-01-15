@@ -29,6 +29,8 @@ interface CanvasVisualProps {
   onDeleteImage: () => void;
   onDeletePoste: (posteId: string) => void;
   onRightClick?: (coords: {x: number, y: number}) => void;
+  onCanvasCtrlClick?: (coords: {x: number, y: number}) => void;
+  capturedPastePoints?: Array<{ x: number; y: number }>;
   loadingUpload?: boolean;
 }
 
@@ -47,6 +49,8 @@ export function CanvasVisual({
   onDeleteImage,
   onDeletePoste: _onDeletePoste,
   onRightClick,
+  onCanvasCtrlClick,
+  capturedPastePoints = [],
   loadingUpload = false
 }: CanvasVisualProps) {
 
@@ -526,6 +530,31 @@ export function CanvasVisual({
                 }
               };
 
+              const handleQuadroBrancoLeftClick = (event: React.MouseEvent<HTMLDivElement>) => {
+                if (!event.ctrlKey || !onCanvasCtrlClick) return;
+                event.preventDefault();
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                const clickX = event.clientX - rect.left;
+                const clickY = event.clientY - rect.top;
+                
+                const scale = (state as any).scale || 1;
+                const positionX = (state as any).positionX || 0;
+                const positionY = (state as any).positionY || 0;
+                
+                const viewportLeft = -positionX / scale;
+                const viewportTop = -positionY / scale;
+                const viewportWidth = rect.width / scale;
+                const viewportHeight = rect.height / scale;
+                
+                const x = Math.round(viewportLeft + (clickX / rect.width) * viewportWidth);
+                const y = Math.round(viewportTop + (clickY / rect.height) * viewportHeight);
+                
+                if (x >= 0 && y >= 0 && x <= 6000 && y <= 6000) {
+                  onCanvasCtrlClick({ x, y });
+                }
+              };
+
               // Função para imagens normais
               const handleImageRightClick = (event: React.MouseEvent<HTMLDivElement>) => {
                 event.preventDefault();
@@ -539,6 +568,20 @@ export function CanvasVisual({
                 const y = (clickY / rect.height) * imageDimensions.height;
                 
                 onRightClick({ x: Math.round(x), y: Math.round(y) });
+              };
+
+              const handleImageLeftClick = (event: React.MouseEvent<HTMLDivElement>) => {
+                if (!event.ctrlKey || !onCanvasCtrlClick || !imageDimensions) return;
+                event.preventDefault();
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                const clickX = event.clientX - rect.left;
+                const clickY = event.clientY - rect.top;
+                
+                const x = (clickX / rect.width) * imageDimensions.width;
+                const y = (clickY / rect.height) * imageDimensions.height;
+                
+                onCanvasCtrlClick({ x: Math.round(x), y: Math.round(y) });
               };
 
               return (
@@ -555,6 +598,7 @@ export function CanvasVisual({
                       ref={canvasLayerRef}
                       className={`relative ${isDragging ? 'cursor-grabbing' : 'cursor-crosshair'}`}
                       onContextMenu={handleQuadroBrancoRightClick}
+                      onClick={handleQuadroBrancoLeftClick}
                       onDrop={handleDrop}
                       onDragOver={(e) => e.preventDefault()}
                       onMouseMove={handleMouseMove}
@@ -603,6 +647,20 @@ export function CanvasVisual({
                       )}
                       
                       {/* Postes do banco de dados - Para quadro branco vazio */}
+                      {/* Pontos capturados para colagem */}
+                      {capturedPastePoints.map((point, index) => (
+                        <div
+                          key={`paste-point-${index}-${point.x}-${point.y}`}
+                          className="absolute rounded-full bg-blue-500 border border-white shadow-sm"
+                          style={{
+                            left: `${point.x - 4}px`,
+                            top: `${point.y - 4}px`,
+                            width: '8px',
+                            height: '8px',
+                            zIndex: 40
+                          }}
+                        />
+                      ))}
                       {budgetDetails?.posts?.map((post) => {
                         const coords = getPostCoordinates(post);
                         return (
@@ -613,8 +671,14 @@ export function CanvasVisual({
                             x={coords.x}  // USAR PIXELS DIRETOS
                             y={coords.y}  // USAR PIXELS DIRETOS
                             isSelected={selectedPostDetail?.id === post.id}
-                            onClick={() => onPostDetailClick?.(post)}
-                            onLeftClick={() => onEditPost?.(post)}
+                            onLeftClick={(e) => {
+                              e.stopPropagation();
+                              if (e.ctrlKey) {
+                                onPostDetailClick?.(post);
+                                return;
+                              }
+                              onEditPost?.(post);
+                            }}
                             onDragStart={(e) => handlePostDragStart(post.id, e)}
                             isDragging={isDragging && draggedPostId === post.id}
                           />
@@ -715,6 +779,15 @@ export function CanvasVisual({
                             onRightClick({ x: clickX, y: clickY });
                           }
                         }}
+                        onClick={(e) => {
+                          if (!e.ctrlKey || !onCanvasCtrlClick) return;
+                          e.preventDefault();
+
+                          const clickX = e.nativeEvent.offsetX;
+                          const clickY = e.nativeEvent.offsetY;
+                          
+                          onCanvasCtrlClick({ x: Math.round(clickX), y: Math.round(clickY) });
+                        }}
                         onDrop={handleDrop}
                         onDragOver={(e) => e.preventDefault()}
                         onMouseMove={handleMouseMove}
@@ -729,21 +802,41 @@ export function CanvasVisual({
                         }}
                       >
                         {/* Postes renderizados na camada transparente */}
+                      {/* Pontos capturados para colagem */}
+                      {capturedPastePoints.map((point, index) => (
+                        <div
+                          key={`paste-point-${index}-${point.x}-${point.y}`}
+                          className="absolute rounded-full bg-blue-500 border border-white shadow-sm"
+                          style={{
+                            left: `${point.x - 4}px`,
+                            top: `${point.y - 4}px`,
+                            width: '8px',
+                            height: '8px',
+                            zIndex: 40
+                          }}
+                        />
+                      ))}
                         {budgetDetails?.posts?.map((post) => {
                           const coords = getPostCoordinates(post);
                           return (
-                            <PostIcon
-                              key={post.id}
-                              id={post.id}
-                              name={post.name}
-                              x={coords.x}
-                              y={coords.y}
-                              isSelected={selectedPostDetail?.id === post.id}
-                              onClick={() => onPostDetailClick?.(post)}
-                              onLeftClick={() => onEditPost?.(post)}
-                              onDragStart={(e) => handlePostDragStart(post.id, e)}
-                              isDragging={isDragging && draggedPostId === post.id}
-                            />
+                          <PostIcon
+                            key={post.id}
+                            id={post.id}
+                            name={post.name}
+                            x={coords.x}
+                            y={coords.y}
+                            isSelected={selectedPostDetail?.id === post.id}
+                            onLeftClick={(e) => {
+                              e.stopPropagation();
+                              if (e.ctrlKey) {
+                                onPostDetailClick?.(post);
+                                return;
+                              }
+                              onEditPost?.(post);
+                            }}
+                            onDragStart={(e) => handlePostDragStart(post.id, e)}
+                            isDragging={isDragging && draggedPostId === post.id}
+                          />
                           );
                         })}
                       </div>
@@ -753,8 +846,9 @@ export function CanvasVisual({
                     <div 
                       ref={canvasLayerRef}
                       className={`relative flex items-center justify-center ${isDragging ? 'cursor-grabbing' : 'cursor-crosshair'}`}
-                      onClick={() => {
+                      onClick={(e) => {
                         handleCanvasClick(undefined as any);
+                        handleImageLeftClick(e);
                       }}
                       onContextMenu={handleImageRightClick}
                       onDrop={handleDrop}
@@ -797,6 +891,20 @@ export function CanvasVisual({
                         />
                       )}
                       {/* Postes do banco de dados - Imagem Normal */}
+                      {/* Pontos capturados para colagem */}
+                      {capturedPastePoints.map((point, index) => (
+                        <div
+                          key={`paste-point-${index}-${point.x}-${point.y}`}
+                          className="absolute rounded-full bg-blue-500 border border-white shadow-sm"
+                          style={{
+                            left: `${point.x - 4}px`,
+                            top: `${point.y - 4}px`,
+                            width: '8px',
+                            height: '8px',
+                            zIndex: 40
+                          }}
+                        />
+                      ))}
                       {budgetDetails?.posts?.map((post) => {
                         const coords = getPostCoordinates(post);
                         return (
@@ -807,8 +915,14 @@ export function CanvasVisual({
                             x={coords.x}
                             y={coords.y}
                             isSelected={selectedPostDetail?.id === post.id}
-                            onClick={() => onPostDetailClick?.(post)}
-                            onLeftClick={() => onEditPost?.(post)}
+                            onLeftClick={(e) => {
+                              e.stopPropagation();
+                              if (e.ctrlKey) {
+                                onPostDetailClick?.(post);
+                                return;
+                              }
+                              onEditPost?.(post);
+                            }}
                             onDragStart={(e) => handlePostDragStart(post.id, e)}
                             isDragging={isDragging && draggedPostId === post.id}
                           />

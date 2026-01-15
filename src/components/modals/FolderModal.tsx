@@ -58,31 +58,36 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-gray-200">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Folder className="h-6 w-6 text-blue-600" />
+            <div className="p-2 bg-gray-100 rounded-lg">
+              <Folder className="h-5 w-5 text-gray-700" />
             </div>
-            <h2 className="text-xl font-semibold text-gray-900">
-              {mode === 'create' ? 'Nova Pasta' : 'Editar Pasta'}
-            </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {mode === 'create' ? 'Nova Pasta' : 'Editar Pasta'}
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {mode === 'create' ? 'Organize seus orçamentos' : 'Atualize as informações'}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             disabled={loading}
           >
-            <X className="h-6 w-6" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-4">
+        <div className="p-5 space-y-4">
           {/* Error Message */}
           {error && (
-            <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+            <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               <p>{error}</p>
             </div>
@@ -90,7 +95,7 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
 
           {/* Nome da Pasta */}
           <div>
-            <label htmlFor="folder-name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="folder-name" className="block text-sm font-medium text-gray-700 mb-1.5">
               Nome da Pasta
             </label>
             <input
@@ -100,10 +105,13 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Projetos 2024"
               maxLength={50}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
               disabled={loading}
               autoFocus
             />
+            <p className="mt-1 text-xs text-gray-500">
+              {name.length}/50 caracteres
+            </p>
           </div>
 
           {/* Cor da Pasta */}
@@ -117,9 +125,9 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
                   key={folderColor.value}
                   type="button"
                   onClick={() => setColor(folderColor.value)}
-                  className={`flex items-center justify-center p-3 rounded-lg border-2 transition-all ${
+                  className={`relative flex items-center justify-center p-3 rounded-lg border-2 transition-all ${
                     color === folderColor.value
-                      ? 'border-gray-900 shadow-md'
+                      ? 'border-gray-900'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                   disabled={loading}
@@ -128,42 +136,54 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
                   <Folder
                     className="h-6 w-6"
                     style={{ color: folderColor.value }}
-                    fill={folderColor.value}
                   />
+                  {color === folderColor.value && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-gray-900 rounded-full border-2 border-white flex items-center justify-center">
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
           </div>
 
           {/* Preview */}
-          <div className="pt-4 border-t border-gray-200">
+          <div className="pt-3 border-t border-gray-200">
             <p className="text-sm font-medium text-gray-700 mb-2">Pré-visualização</p>
-            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-              <Folder
-                className="h-8 w-8 flex-shrink-0"
-                style={{ color }}
-                fill={color}
-              />
-              <span className="text-gray-900 font-medium">
-                {name.trim() || 'Nome da pasta'}
-              </span>
+            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="p-2 bg-white rounded-lg">
+                <Folder
+                  className="h-6 w-6"
+                  style={{ color }}
+                />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {name.trim() || 'Nome da pasta'}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Assim sua pasta aparecerá
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end space-x-3 p-4 border-t border-gray-200 bg-gray-50">
           <button
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm text-gray-700 font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             onClick={handleSave}
             disabled={loading || !name.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Salvando...' : mode === 'create' ? 'Criar Pasta' : 'Salvar'}
           </button>
