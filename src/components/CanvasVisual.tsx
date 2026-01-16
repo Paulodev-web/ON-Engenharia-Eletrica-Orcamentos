@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Upload, Trash2, Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw, Package } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
@@ -6,6 +6,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { Orcamento, Poste, TipoPoste, BudgetPostDetail, BudgetDetails } from '../types';
 import { PostIcon } from './PostIcon';
+import { getPostDisplayName } from '../lib/utils';
 
 // Configuração do worker do PDF
 // Tenta usar CDN primeiro, com fallback para arquivo local
@@ -81,22 +82,28 @@ export function CanvasVisual({
   
 
 
-  // Criar quadro branco padrão quando não há imagem
-  const hasImage = orcamento.imagemPlanta && orcamento.imagemPlanta.trim() !== '';
+  // ⚡ OTIMIZAÇÃO: Usar useMemo para valores calculados
+  const hasImage = useMemo(() => 
+    orcamento.imagemPlanta && orcamento.imagemPlanta.trim() !== '',
+    [orcamento.imagemPlanta]
+  );
   
   // Configurar dimensões padrão para o quadro branco
-  const defaultCanvasDimensions = {
+  const defaultCanvasDimensions = useMemo(() => ({
     width: 6000,
     height: 6000,
     naturalWidth: 6000,
     naturalHeight: 6000
-  };
+  }), []);
 
-  // Detectar se é PDF (só verifica se há imagem)
-  const isPDF = hasImage && (
-    orcamento.imagemPlanta?.toLowerCase().includes('.pdf') || 
-    orcamento.imagemPlanta?.toLowerCase().includes('application/pdf') ||
-    orcamento.imagemPlanta?.startsWith('data:application/pdf')
+  // ⚡ OTIMIZAÇÃO: Detectar se é PDF com useMemo
+  const isPDF = useMemo(() => 
+    hasImage && (
+      orcamento.imagemPlanta?.toLowerCase().includes('.pdf') || 
+      orcamento.imagemPlanta?.toLowerCase().includes('application/pdf') ||
+      orcamento.imagemPlanta?.startsWith('data:application/pdf')
+    ),
+    [hasImage, orcamento.imagemPlanta]
   );
   
   // Calcular dimensões da imagem quando ela mudar
@@ -667,7 +674,7 @@ export function CanvasVisual({
                           <PostIcon
                             key={post.id}
                             id={post.id}
-                            name={post.name}
+                            name={getPostDisplayName(post)}
                             x={coords.x}  // USAR PIXELS DIRETOS
                             y={coords.y}  // USAR PIXELS DIRETOS
                             isSelected={selectedPostDetail?.id === post.id}
@@ -822,7 +829,7 @@ export function CanvasVisual({
                           <PostIcon
                             key={post.id}
                             id={post.id}
-                            name={post.name}
+                            name={getPostDisplayName(post)}
                             x={coords.x}
                             y={coords.y}
                             isSelected={selectedPostDetail?.id === post.id}
@@ -911,7 +918,7 @@ export function CanvasVisual({
                           <PostIcon
                             key={post.id}
                             id={post.id}
-                            name={post.name}
+                            name={getPostDisplayName(post)}
                             x={coords.x}
                             y={coords.y}
                             isSelected={selectedPostDetail?.id === post.id}

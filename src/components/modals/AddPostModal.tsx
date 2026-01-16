@@ -530,7 +530,7 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
                 <div className="space-y-4">
                   <div>
                     <label htmlFor="postName" className="block text-sm font-medium text-gray-700 mb-1">
-                      Nome do Poste *
+                      Nome Personalizável *
                     </label>
                     <input
                       type="text"
@@ -538,10 +538,13 @@ function AddPostModalContent({ isOpen, onClose, coordinates, onSubmit, onSubmitW
                       value={postName}
                       onChange={(e) => setPostName(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ex: P-01"
+                      placeholder="Ex: P, Poste, Entrada, etc."
                       required
                       disabled={isSubmitting}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Um contador automático será adicionado ao nome (ex: P 01, P 02, etc.)
+                    </p>
                   </div>
 
                   <div>

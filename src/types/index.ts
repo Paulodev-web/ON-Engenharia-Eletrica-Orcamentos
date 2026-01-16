@@ -28,7 +28,9 @@ export type TipoFixacao = 'Direto' | 'Cruzeta' | 'Suporte' | 'Outro';
 
 export interface Poste {
   id: string;
-  nome: string;
+  nome: string; // Campo legado - mantido para compatibilidade
+  customName?: string; // Nome personalizável pelo usuário
+  counter?: number; // Contador automático
   tipo: TipoPoste;
   tipoFixacao?: TipoFixacao;
   x: number;
@@ -81,7 +83,9 @@ export interface PostType {
 // Tipos para dados detalhados do banco de dados
 export interface BudgetPostDetail {
   id: string;
-  name: string;
+  name: string; // Campo legado - mantido para compatibilidade
+  custom_name?: string; // Nome personalizável pelo usuário
+  counter: number; // Contador automático
   x_coord: number;
   y_coord: number;
   post_types: {

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Loader2, Search, Plus, Minus, Package, Folder, ArrowUpDown, ArrowUp, ArrowDown, Check, Trash2 } from 'lucide-react';
+import { X, Loader2, Search, Plus, Minus, Package, Folder, ArrowUpDown, ArrowUp, ArrowDown, Check, Trash2, Edit2, Save, XCircle } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import { useAlertDialog } from '../../hooks/useAlertDialog';
 import { AlertDialog } from '../ui/alert-dialog';
 import { Material, BudgetPostDetail } from '../../types';
+import { getPostDisplayName } from '../../lib/utils';
 
 interface EditPostModalProps {
   isOpen: boolean;
@@ -32,6 +33,8 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
     updateLooseMaterialQuantity,
     removeLooseMaterialFromPost,
     deletePostFromBudget,
+    updatePostCustomName,
+    updatePostCounter,
     fetchBudgetDetails
   } = useApp();
   
@@ -59,6 +62,14 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
   
   // Estado local do poste atualizado
   const [currentPost, setCurrentPost] = useState<BudgetPostDetail | null>(post);
+  
+  // Estado para edição do nome personalizado
+  const [editingCustomName, setEditingCustomName] = useState(false);
+  const [customNameInput, setCustomNameInput] = useState('');
+  
+  // Estado para edição do contador
+  const [editingCounter, setEditingCounter] = useState(false);
+  const [counterInput, setCounterInput] = useState('');
   
   // Ref para rastrear se o modal acabou de abrir (evita resets desnecessários)
   const lastOpenState = useRef(false);
@@ -91,6 +102,10 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
       setActiveTab('info');
       setInputStates({});
       setCurrentPost(post);
+      setCustomNameInput(post.custom_name || '');
+      setCounterInput(post.counter.toString());
+      setEditingCustomName(false);
+      setEditingCounter(false);
       
       // Carregar grupos da concessionária atual
       if (currentOrcamento?.company_id) {
@@ -304,13 +319,75 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
     }
   };
 
+  // Função para atualizar o nome personalizado
+  const handleUpdateCustomName = async () => {
+    if (!currentPost) return;
+    
+    try {
+      await updatePostCustomName(currentPost.id, customNameInput);
+      setEditingCustomName(false);
+      
+      alertDialog.showSuccess(
+        'Nome Atualizado',
+        'O nome personalizado foi atualizado com sucesso.'
+      );
+    } catch (error) {
+      alertDialog.showError(
+        'Erro ao Atualizar',
+        'Não foi possível atualizar o nome. Tente novamente.'
+      );
+    }
+  };
+
+  // Função para cancelar edição do nome
+  const handleCancelCustomNameEdit = () => {
+    setCustomNameInput(currentPost?.custom_name || '');
+    setEditingCustomName(false);
+  };
+
+  // Função para atualizar o contador
+  const handleUpdateCounter = async () => {
+    if (!currentPost) return;
+    
+    const newCounter = parseInt(counterInput);
+    
+    if (isNaN(newCounter) || newCounter < 1) {
+      alertDialog.showError(
+        'Contador Inválido',
+        'O contador deve ser um número maior que 0.'
+      );
+      return;
+    }
+    
+    try {
+      await updatePostCounter(currentPost.id, newCounter);
+      setEditingCounter(false);
+      
+      alertDialog.showSuccess(
+        'Contador Atualizado',
+        'O contador do poste foi atualizado com sucesso.'
+      );
+    } catch (error) {
+      alertDialog.showError(
+        'Erro ao Atualizar',
+        'Não foi possível atualizar o contador. Tente novamente.'
+      );
+    }
+  };
+
+  // Função para cancelar edição do contador
+  const handleCancelCounterEdit = () => {
+    setCounterInput(currentPost?.counter.toString() || '1');
+    setEditingCounter(false);
+  };
+
   // Função para excluir o poste
   const handleDeletePost = () => {
     if (!currentPost) return;
     
     alertDialog.showConfirm(
       'Excluir Poste',
-      `Tem certeza que deseja excluir o poste "${currentPost.name}"? Esta ação não pode ser desfeita e todos os grupos e materiais associados também serão removidos.`,
+      `Tem certeza que deseja excluir o poste "${currentPost.custom_name || ''} ${currentPost.counter.toString().padStart(2, '0')}"? Esta ação não pode ser desfeita e todos os grupos e materiais associados também serão removidos.`,
       async () => {
         try {
           await deletePostFromBudget(currentPost.id);
@@ -465,7 +542,7 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Editar Poste: {currentPost.name}</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Editar Poste: {getPostDisplayName(currentPost)}</h3>
             <p className="text-sm text-gray-600 mt-1">
               {currentPost.post_types?.name} • Coordenadas: x:{currentPost.x_coord.toFixed(2)}, y:{currentPost.y_coord.toFixed(2)}
             </p>
@@ -529,12 +606,108 @@ export function EditPostModal({ isOpen, onClose, post }: EditPostModalProps) {
           {activeTab === 'info' && (
             <div className="space-y-6">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-semibold text-blue-900 mb-2">Informações do Poste</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-blue-700 font-medium">Nome:</span>
-                    <span className="text-blue-900">{currentPost.name}</span>
-                  </div>
+                <h4 className="font-semibold text-blue-900 mb-3">Informações do Poste</h4>
+                <div className="space-y-3 text-sm">
+                  {/* ⚠️ POSTE ANTIGO: Mostrar apenas o nome original, simples e direto */}
+                  {(!currentPost.counter || currentPost.counter === 0) ? (
+                    <div>
+                      <label className="block text-blue-700 font-medium mb-1">Nome:</label>
+                      <div className="text-blue-900 font-medium text-lg">{currentPost.name}</div>
+                    </div>
+                  ) : (
+                    /* ✅ POSTE NOVO: Mostrar campos editáveis */
+                    <>
+                      <div>
+                        <label className="block text-blue-700 font-medium mb-1">Nome Personalizado:</label>
+                        {editingCustomName ? (
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={customNameInput}
+                              onChange={(e) => setCustomNameInput(e.target.value)}
+                              className="flex-1 px-3 py-1.5 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Ex: P, Poste, Entrada"
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleUpdateCustomName}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                              title="Salvar"
+                            >
+                              <Save className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={handleCancelCustomNameEdit}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                              title="Cancelar"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <span className="text-blue-900 font-medium">{currentPost.custom_name || '(Sem nome)'}</span>
+                            <button
+                              onClick={() => setEditingCustomName(true)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                              title="Editar nome"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-blue-700 font-medium mb-1">Contador (Ordem):</label>
+                        {editingCounter ? (
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="number"
+                              min="1"
+                              value={counterInput}
+                              onChange={(e) => setCounterInput(e.target.value)}
+                              className="flex-1 px-3 py-1.5 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="1"
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleUpdateCounter}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                              title="Salvar"
+                            >
+                              <Save className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={handleCancelCounterEdit}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                              title="Cancelar"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <span className="text-blue-900 font-mono text-lg">{currentPost.counter.toString().padStart(2, '0')}</span>
+                            <button
+                              onClick={() => setEditingCounter(true)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                              title="Editar contador"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                        <p className="text-xs text-blue-600 mt-1">
+                          💡 Altere o contador para reordenar o poste na listagem
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-blue-200">
+                        <span className="text-blue-700 font-medium">Nome Completo:</span>
+                        <span className="text-blue-900 font-semibold text-lg">{getPostDisplayName(currentPost)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="pt-2 border-t border-blue-200"></div>
                   <div className="flex justify-between">
                     <span className="text-blue-700 font-medium">Tipo:</span>
                     <span className="text-blue-900">{currentPost.post_types?.name || 'Não definido'}</span>

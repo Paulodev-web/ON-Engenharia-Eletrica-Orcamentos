@@ -168,7 +168,7 @@ export function PainelContexto({ orcamento, selectedPoste, selectedPostDetail, o
 
   // Determinar qual poste está selecionado
   const currentPost = selectedPostDetail || selectedPoste;
-  const postName = selectedPostDetail ? selectedPostDetail.name : selectedPoste?.nome;
+  const postName = selectedPostDetail ? getPostDisplayName(selectedPostDetail) : selectedPoste?.nome;
   const isSupabasePost = !!selectedPostDetail;
 
   return (

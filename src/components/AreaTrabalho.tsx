@@ -8,7 +8,9 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './
 import { AddPostModal } from './modals/AddPostModal';
 import { EditPostModal } from './modals/EditPostModal';
 import { useAlertDialog } from '../hooks/useAlertDialog';
+import { useDebounce } from '../hooks/useDebounce';
 import { AlertDialog } from './ui/alert-dialog';
+import { getPostDisplayName } from '../lib/utils';
 
 export function AreaTrabalho() {
   // --- INÍCIO DO BLOCO DE CÓDIGO PARA SUBSTITUIR ---
@@ -59,8 +61,9 @@ export function AreaTrabalho() {
   const [isPastingPost, setIsPastingPost] = useState(false);
   const pasteSequenceRef = useRef(1);
   
-  // Estado para detectar se é desktop/PC
-  const [isDesktop, setIsDesktop] = useState(false);
+  // ⚠️ NOTA: Estado de desktop comentado pois não está sendo usado atualmente
+  // Descomente se necessário para recursos específicos de desktop
+  // const [isDesktop, setIsDesktop] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clickCoordinates, setClickCoordinates] = useState<{ x: number, y: number } | null>(null);
@@ -69,7 +72,8 @@ export function AreaTrabalho() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [postToEdit, setPostToEdit] = useState<any | null>(null);
   
-  // Efeito para detectar se é desktop/PC
+  // ⚠️ NOTA: Detecção de desktop comentada - descomente se necessário
+  /*
   useEffect(() => {
     const checkIsDesktop = () => {
       // Detecta se é desktop baseado na largura da tela e user agent
@@ -83,6 +87,7 @@ export function AreaTrabalho() {
     
     return () => window.removeEventListener('resize', checkIsDesktop);
   }, []);
+  */
 
 
   const buildIncrementedPostName = useCallback((baseName: string, offset: number) => {
@@ -116,7 +121,9 @@ export function AreaTrabalho() {
 
     const sequence = pasteSequenceRef.current;
     pasteSequenceRef.current += 1;
-    const postName = buildIncrementedPostName(copiedPostDetail.name, sequence);
+    // Usar o custom_name ou name como base para incrementar
+    const baseName = copiedPostDetail.custom_name || copiedPostDetail.name;
+    const postName = buildIncrementedPostName(baseName, sequence);
 
     const newPostId = await addPostToBudget({
       budget_id: currentOrcamento.id,
@@ -249,15 +256,21 @@ export function AreaTrabalho() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [capturedPastePoints.length, copiedPostDetail, handlePasteCapturedPoints, selectedPostDetail]);
 
-  // Efeito principal e unificado para carregar TODOS os dados da AreaTrabalho
+  // ⚡ OTIMIZADO: Efeito principal para carregar dados da AreaTrabalho
   useEffect(() => {
     const budgetId = currentOrcamento?.id;
     const companyId = currentOrcamento?.company_id;
+    
     // Só executa se tivermos um ID de orçamento
     if (budgetId) {
+      // Sempre busca detalhes do orçamento (necessário)
       fetchBudgetDetails(budgetId);
-      fetchPostTypes(); // Sempre busca o catálogo de tipos de poste
-      fetchMaterials(); // Sempre busca o catálogo de materiais para "Materiais Avulsos"
+      
+      // ⚡ OTIMIZAÇÃO: fetchPostTypes e fetchMaterials agora usam cache interno
+      // Só carregam se ainda não foram carregados (lazy loading)
+      fetchPostTypes(); // Cache interno evita reload
+      fetchMaterials(); // Cache interno evita reload
+      
       // Se tivermos um ID de empresa, busca os grupos de itens
       if (companyId) {
         fetchItemGroups(companyId);
@@ -934,6 +947,10 @@ function PostListAccordion({
 }: PostListAccordionProps) {
   const [isRendering, setIsRendering] = useState(false);
   const [postSearchTerm, setPostSearchTerm] = useState('');
+  
+  // ⚡ OTIMIZAÇÃO: Debounce na busca de postes para evitar renderizações excessivas
+  const debouncedPostSearchTerm = useDebounce(postSearchTerm, 300);
+  
   const postsToDisplay = budgetDetails?.posts || [];
 
   // Debounce para evitar renderizações conflitantes
@@ -951,32 +968,56 @@ function PostListAccordion({
   const [addingLooseMaterial, setAddingLooseMaterial] = useState(false);
   const [removingLooseMaterial, setRemovingLooseMaterial] = useState<string | null>(null);
   
-  // Filtrar postes baseado no termo de busca
+  // ⚡ OTIMIZAÇÃO: Filtrar e ordenar postes com useMemo e debounce
   const filteredPosts = useMemo(() => {
-    if (!postSearchTerm) return postsToDisplay;
+    let posts = postsToDisplay;
     
-    const searchLower = postSearchTerm.toLowerCase();
-    return postsToDisplay.filter((post: any) => 
-      post.name?.toLowerCase().includes(searchLower) ||
-      post.post_types?.name?.toLowerCase().includes(searchLower)
-    );
-  }, [postsToDisplay, postSearchTerm]);
+    // Filtrar pela busca
+    if (debouncedPostSearchTerm) {
+      const searchLower = debouncedPostSearchTerm.toLowerCase();
+      posts = posts.filter((post: any) => {
+        const postDisplayName = getPostDisplayName(post);
+        return postDisplayName.toLowerCase().includes(searchLower) ||
+          post.custom_name?.toLowerCase().includes(searchLower) ||
+          post.name?.toLowerCase().includes(searchLower) ||
+          post.post_types?.name?.toLowerCase().includes(searchLower);
+      });
+    }
+    
+    // Ordenar por contador
+    return [...posts].sort((a: any, b: any) => {
+      const counterA = a.counter || 0;
+      const counterB = b.counter || 0;
+      return counterA - counterB;
+    });
+  }, [postsToDisplay, debouncedPostSearchTerm]);
   
 
+  
+  // ⚡ OTIMIZAÇÃO: Debounce nas buscas para evitar renderizações excessivas
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const debouncedMaterialSearchTerm = useDebounce(materialSearchTerm, 300);
   
   // Usar APENAS grupos do Supabase (itemGroups) filtrados por company_id
   // Remover fallback para dados locais (gruposItens) para garantir consistência
   const availableGroups = itemGroups; // Sempre usar apenas itemGroups do banco
   
-  const gruposFiltrados = availableGroups.filter((g: any) => {
-    // itemGroups já vem filtrados pela empresa na função fetchItemGroups
-    return g.nome.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  // ⚡ OTIMIZAÇÃO: Filtrar grupos com useMemo e debounce
+  const gruposFiltrados = useMemo(() => 
+    availableGroups.filter((g: any) => {
+      // itemGroups já vem filtrados pela empresa na função fetchItemGroups
+      return g.nome.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
+    }),
+    [availableGroups, debouncedSearchTerm]
+  );
   
-  // Filtrar materiais para busca de materiais avulsos
-  const materiaisFiltrados = materiais.filter(material =>
-    material.descricao.toLowerCase().includes(materialSearchTerm.toLowerCase()) ||
-    material.codigo.toLowerCase().includes(materialSearchTerm.toLowerCase())
+  // ⚡ OTIMIZAÇÃO: Filtrar materiais com useMemo e debounce
+  const materiaisFiltrados = useMemo(() => 
+    materiais.filter(material =>
+      material.descricao.toLowerCase().includes(debouncedMaterialSearchTerm.toLowerCase()) ||
+      material.codigo.toLowerCase().includes(debouncedMaterialSearchTerm.toLowerCase())
+    ),
+    [materiais, debouncedMaterialSearchTerm]
   );
   
   // Função para adicionar material avulso
@@ -1086,7 +1127,7 @@ function PostListAccordion({
           <div className="px-4 py-3">
             <Accordion type="single" collapsible className="w-full space-y-2">
               {filteredPosts.map((post: any) => {
-                const postName = post.name;
+                const postName = getPostDisplayName(post);
                 const postType = post.post_types?.name;
                 const postGroups = post.post_item_groups;
             
@@ -1112,7 +1153,7 @@ function PostListAccordion({
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeletePostFromDatabase(post.id, post.name);
+                            handleDeletePostFromDatabase(post.id, getPostDisplayName(post));
                           }}
                           className="text-red-600 hover:text-red-900 cursor-pointer"
                           title="Excluir poste"
@@ -1122,7 +1163,7 @@ function PostListAccordion({
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
                               e.stopPropagation();
-                              handleDeletePostFromDatabase(post.id, post.name);
+                              handleDeletePostFromDatabase(post.id, getPostDisplayName(post));
                             }
                           }}
                         >
@@ -1160,7 +1201,7 @@ function PostListAccordion({
                             <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
                           </div>
                         )}
-                        {searchTerm && gruposFiltrados.length > 0 && !addingGroup && (
+                        {debouncedSearchTerm && gruposFiltrados.length > 0 && !addingGroup && (
                           <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto z-10 shadow-lg">
                             {gruposFiltrados.map((grupo: any) => (
                               <button
@@ -1279,7 +1320,7 @@ function PostListAccordion({
                               <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
                             </div>
                           )}
-                          {materialSearchTerm && materiaisFiltrados.length > 0 && !addingLooseMaterial && (
+                          {debouncedMaterialSearchTerm && materiaisFiltrados.length > 0 && !addingLooseMaterial && (
                             <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-md mt-1 max-h-40 overflow-y-auto z-20 shadow-lg">
                               {materiaisFiltrados.slice(0, 10).map((material) => (
                                 <button

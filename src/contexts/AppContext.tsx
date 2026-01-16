@@ -65,6 +65,8 @@ interface AppContextType {
   addGroupToPost: (groupId: string, postId: string) => Promise<void>;
   deletePostFromBudget: (postId: string) => Promise<void>;
   updatePostCoordinates: (postId: string, x: number, y: number) => Promise<void>;
+  updatePostCustomName: (postId: string, customName: string) => Promise<void>;
+  updatePostCounter: (postId: string, newCounter: number) => Promise<void>;
   removeGroupFromPost: (postGroupId: string) => Promise<void>;
   updateMaterialQuantityInPostGroup: (postGroupId: string, materialId: string, newQuantity: number) => Promise<void>;
   removeMaterialFromPostGroup: (postGroupId: string, materialId: string) => Promise<void>;
@@ -159,7 +161,7 @@ async function fetchAllRecords(
       });
     }
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
       console.error(`Erro ao buscar registros de "${tableName}":`, error);
@@ -196,6 +198,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState<boolean>(false);
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
   
+  // ⚡ CACHE: Flags para evitar recarregamentos desnecessários
+  const [hasFetchedMaterials, setHasFetchedMaterials] = useState<boolean>(false);
+  const [hasFetchedPostTypes, setHasFetchedPostTypes] = useState<boolean>(false);
+  
   // Novos estados para gerenciar grupos
   const [utilityCompanies, setUtilityCompanies] = useState<Concessionaria[]>([]);
   const [itemGroups, setItemGroups] = useState<GrupoItem[]>([]);
@@ -218,9 +224,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
 
-  const fetchMaterials = useCallback(async () => {
+  const fetchMaterials = useCallback(async (forceRefresh: boolean = false) => {
+    // ⚡ CACHE: Evita recarregar se já tiver dados em cache (a menos que forçado)
+    if (hasFetchedMaterials && materiais.length > 0 && !forceRefresh) {
+      console.log("💾 Usando materiais do cache (", materiais.length, "itens)");
+      return;
+    }
+
     try {
       setLoadingMaterials(true);
+      console.log("📦 Carregando materiais do banco de dados...");
 
       // Buscar TODOS os materiais usando a função helper de paginação
       const allMaterials = await fetchAllRecords('materials', '*', 'created_at', false);
@@ -246,6 +259,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       setMateriais(materiaisUnicos);
+      setHasFetchedMaterials(true);
+      console.log("✅ Materiais carregados:", materiaisUnicos.length, "itens");
     } catch (error) {
       console.error('Erro ao buscar materiais:', error);
       // Em caso de erro, mantém a lista vazia
@@ -253,7 +268,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoadingMaterials(false);
     }
-  }, []);
+  }, [hasFetchedMaterials, materiais.length]);
 
   const addMaterial = async (material: Omit<Material, 'id'>) => {
     try {
@@ -335,7 +350,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       // Sincronizar dados após mutação - CRÍTICO para preços atualizados
       console.log("💰 Material atualizado, sincronizando preços...");
-      await fetchMaterials();
+      await fetchMaterials(true); // Forçar refresh
     } catch (error) {
       console.error('Erro ao atualizar material:', error);
       throw error;
@@ -380,7 +395,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMateriais([]);
       
       // Recarregar para garantir
-      await fetchMaterials();
+      await fetchMaterials(true); // Forçar refresh
     } catch (error) {
       console.error('Erro ao excluir todos os materiais:', error);
       throw error;
@@ -662,7 +677,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       console.log(`✅ Novo orçamento criado: ${newBudget.id}`);
 
       // 3. Buscar todos os postes do orçamento original com seus detalhes
-      const { data: originalPosts, error: postsError, count: postsCount } = await supabase
+      const { data: originalPosts, error: postsError } = await supabase
         .from('budget_posts')
         .select(`
           *,
@@ -736,7 +751,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
               // Duplicar materiais do grupo
               if (originalGroup.post_item_group_materials && originalGroup.post_item_group_materials.length > 0) {
-                const groupMaterials = originalGroup.post_item_group_materials.map(material => ({
+                const groupMaterials = originalGroup.post_item_group_materials.map((material: any) => ({
                   post_item_group_id: newGroup.id,
                   material_id: material.material_id,
                   quantity: material.quantity,
@@ -759,7 +774,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
           // 4.3. Duplicar materiais avulsos do poste
           if (originalPost.post_materials && originalPost.post_materials.length > 0) {
-            const looseMaterials = originalPost.post_materials.map(material => ({
+            const looseMaterials = originalPost.post_materials.map((material: any) => ({
               post_id: newPost.id,
               material_id: material.material_id,
               quantity: material.quantity,
@@ -991,9 +1006,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchBudgetDetails = useCallback(async (budgetId: string) => {
     try {
       setLoadingBudgetDetails(true);
+      console.time('⏱️ Total fetchBudgetDetails');
 
       
-      // Buscar informações do orçamento principal
+      // ⚡ OTIMIZAÇÃO: Buscar dados em paralelo quando possível
+      console.time('⏱️ Budget info');
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
         .select(`
@@ -1010,32 +1027,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         `)
         .eq('id', budgetId)
         .single();
+      console.timeEnd('⏱️ Budget info');
 
       if (budgetError) {
         console.error('ERRO DETALHADO DO SUPABASE (budget):', budgetError);
-        console.error('Tipo do erro:', typeof budgetError);
-        console.error('Mensagem do erro:', budgetError.message);
-        console.error('Código do erro:', budgetError.code);
-        console.error('Detalhes do erro:', budgetError.details);
-        console.error('Hint do erro:', budgetError.hint);
         throw budgetError;
       }
       
-      // Query aninhada para buscar todos os postes relacionados ao orçamento
-      const { data: postsData, error: postsError, count: postsCount } = await supabase
+      // ⚡ OTIMIZAÇÃO: Query simplificada - buscar apenas campos essenciais
+      console.time('⏱️ Posts query');
+      const { data: postsData, error: postsError } = await supabase
         .from('budget_posts')
         .select(`
           id,
           name,
+          custom_name,
+          counter,
           x_coord,
           y_coord,
-          post_types (
+          post_types!inner (
             id,
             name,
             code,
-            description,
-            shape,
-            height_m,
             price
           ),
           post_item_groups (
@@ -1050,7 +1063,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 id,
                 code,
                 name,
-                description,
                 unit,
                 price
               )
@@ -1065,15 +1077,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
               id,
               code,
               name,
-              description,
               unit,
               price
             )
           )
-        `, { count: 'exact' })
+        `)
         .eq('budget_id', budgetId)
-        .order('created_at', { ascending: true })
-        .range(0, 500); // Limite de 500 postes por orçamento (otimizado)
+        .order('counter', { ascending: true })
+        .limit(500); // ⚡ Usar limit ao invés de range
+      console.timeEnd('⏱️ Posts query');
 
       if (postsError) {
         console.error('ERRO DETALHADO DO SUPABASE (posts):', postsError);
@@ -1088,18 +1100,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 
       // Mapear os dados dos postes para o tipo correto
-      const postsFormatted: BudgetPostDetail[] = postsData?.map(post => ({
-        id: post.id,
-        name: post.name || '',
-        x_coord: post.x_coord || 0,
-        y_coord: post.y_coord || 0,
-        post_types: post.post_types ? {
+      const postsFormatted: BudgetPostDetail[] = postsData?.map(post => {
+        console.log('📍 Carregando poste:', { id: post.id, name: post.name, counter: post.counter, custom_name: post.custom_name });
+        return {
+          id: post.id,
+          name: post.name || '',
+          custom_name: post.custom_name,
+          counter: post.counter || 0,
+          x_coord: post.x_coord || 0,
+          y_coord: post.y_coord || 0,
+          post_types: post.post_types ? {
           id: (post.post_types as any).id,
           name: (post.post_types as any).name || '',
           code: (post.post_types as any).code || undefined,
-          description: (post.post_types as any).description || undefined,
-          shape: (post.post_types as any).shape || undefined,
-          height_m: (post.post_types as any).height_m || undefined,
+          description: undefined, // ⚡ Não carregado para otimização
+          shape: undefined, // ⚡ Não carregado para otimização
+          height_m: undefined, // ⚡ Não carregado para otimização
           price: (post.post_types as any).price || 0
         } : null,
         post_item_groups: post.post_item_groups?.map(group => ({
@@ -1115,7 +1131,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 id: (material.materials as any).id,
                 code: (material.materials as any).code || '',
                 name: (material.materials as any).name || '',
-                description: (material.materials as any).description || undefined,
+                description: undefined, // ⚡ Não carregado para otimização
                 unit: (material.materials as any).unit || '',
                 price: (material.materials as any).price || 0
               } : {
@@ -1139,7 +1155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: (material.materials as any).id,
             code: (material.materials as any).code || '',
             name: (material.materials as any).name || '',
-            description: (material.materials as any).description || undefined,
+            description: undefined, // ⚡ Não carregado para otimização
             unit: (material.materials as any).unit || '',
             price: (material.materials as any).price || 0
           } : {
@@ -1151,7 +1167,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             price: 0
           }
         })) || []
-      })) || [];
+        };
+      }) || [];
 
       // Combinar dados do orçamento e postes em um objeto BudgetDetails
       const budgetDetails: BudgetDetails = {
@@ -1164,20 +1181,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         created_at: budgetData.created_at || undefined,
         updated_at: budgetData.updated_at || undefined,
         plan_image_url: budgetData.plan_image_url || undefined,
-        render_version: budgetData.render_version || 1, // 🔥 NOVO: Versão de renderização (default 1)
+        render_version: budgetData.render_version || 1,
         posts: postsFormatted
       };
 
       setBudgetDetails(budgetDetails);
+      console.timeEnd('⏱️ Total fetchBudgetDetails');
+      console.log(`✅ Orçamento carregado: ${postsFormatted.length} postes`);
     } catch (error) {
-      console.error('ERRO DETALHADO DO SUPABASE (geral):', error);
-      console.error('Tipo do erro:', typeof error);
+      console.error('❌ ERRO ao carregar orçamento:', error);
       if (error && typeof error === 'object') {
-        console.error('Mensagem do erro:', (error as any).message);
-        console.error('Código do erro:', (error as any).code);
-        console.error('Detalhes do erro:', (error as any).details);
-        console.error('Hint do erro:', (error as any).hint);
-        console.error('Stack do erro:', (error as any).stack);
+        console.error('Detalhes:', (error as any).message);
       }
       setBudgetDetails(null);
     } finally {
@@ -1185,9 +1199,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const fetchPostTypes = useCallback(async () => {
+  const fetchPostTypes = useCallback(async (forceRefresh: boolean = false) => {
+    // ⚡ CACHE: Evita recarregar se já tiver dados em cache (a menos que forçado)
+    if (hasFetchedPostTypes && postTypes.length > 0 && !forceRefresh) {
+      console.log("💾 Usando tipos de poste do cache (", postTypes.length, "itens)");
+      return;
+    }
+
     try {
       setLoadingPostTypes(true);
+      console.log("🏗️ Carregando tipos de poste do banco de dados...");
 
       
       // Buscar TODOS os tipos de poste usando a função helper de paginação
@@ -1207,13 +1228,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
 
       setPostTypes(postTypesFormatted);
+      setHasFetchedPostTypes(true);
+      console.log("✅ Tipos de poste carregados:", postTypesFormatted.length, "itens");
     } catch (error) {
       console.error('Erro ao buscar tipos de poste:', error);
       setPostTypes([]);
     } finally {
       setLoadingPostTypes(false);
     }
-  }, []);
+  }, [hasFetchedPostTypes, postTypes.length]);
 
   const addPostType = async (data: { name: string; code?: string; description?: string; shape?: string; height_m?: number; price: number }) => {
     try {
@@ -1304,7 +1327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMateriais(prev => [...prev, newMaterialFormatted]);
       
       // Sincronizar dados após mutação
-      await fetchPostTypes();
+      await fetchPostTypes(true); // Forçar refresh
     } catch (error: any) {
       console.error('❌ Erro ao adicionar tipo de poste (catch geral):', {
         message: error?.message,
@@ -1430,7 +1453,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       // Sincronizar dados após mutação - CRÍTICO para preços de postes atualizados
       console.log("🏗️ Tipo de poste atualizado, sincronizando preços...");
-      await Promise.all([fetchPostTypes(), fetchMaterials()]);
+      await Promise.all([fetchPostTypes(true), fetchMaterials(true)]); // Forçar refresh
       
       // Se há um orçamento aberto com detalhes carregados, recarregar para refletir mudanças
       if (budgetDetails?.id) {
@@ -1482,7 +1505,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       
       // Sincronizar dados após mutação
-      await fetchPostTypes();
+      await fetchPostTypes(true); // Forçar refresh
     } catch (error) {
       console.error('Erro ao excluir tipo de poste:', error);
       throw error;
@@ -1506,12 +1529,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw postTypeError;
       }
       
+      // Calcular o próximo contador para este orçamento
+      const { data: maxCounterData, error: maxCounterError } = await supabase
+        .from('budget_posts')
+        .select('counter')
+        .eq('budget_id', newPostData.budget_id)
+        .order('counter', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (maxCounterError) {
+        console.error('Erro ao buscar contador máximo:', maxCounterError);
+        throw maxCounterError;
+      }
+      
+      const nextCounter = maxCounterData?.counter ? maxCounterData.counter + 1 : 1;
+      console.log(`📊 Próximo contador: ${nextCounter}`);
+      
       const { data, error } = await supabase
         .from('budget_posts')
         .insert({
           budget_id: newPostData.budget_id,
           post_type_id: newPostData.post_type_id,
-          name: newPostData.name,
+          name: newPostData.name, // Mantido para compatibilidade legado
+          custom_name: newPostData.name, // Nome personalizável
+          counter: nextCounter, // Contador automático
           x_coord: newPostData.x_coord,
           y_coord: newPostData.y_coord,
         })
@@ -1604,6 +1646,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newPostDetail: BudgetPostDetail = {
         id: data.id,
         name: data.name || '',
+        counter: data.counter || 0,
         x_coord: data.x_coord || 0,
         y_coord: data.y_coord || 0,
         post_types: data.post_types ? {
@@ -1858,13 +1901,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!prev) return prev;
         return {
           ...prev,
-          posts: prev.posts.map(post => 
+          posts: prev.posts.map(post =>
             post.id === postId ? { ...post, x_coord: x, y_coord: y } : post
           )
         };
       });
     } catch (error) {
       console.error('Erro ao atualizar coordenadas do poste:', error);
+      throw error;
+    }
+  };
+
+  const updatePostCustomName = async (postId: string, customName: string) => {
+    try {
+      console.log(`🔄 Atualizando nome personalizado do poste ${postId}: ${customName}`);
+
+      const { error } = await supabase
+        .from('budget_posts')
+        .update({
+          custom_name: customName,
+          name: customName // Atualizar também o campo legado
+        })
+        .eq('id', postId);
+
+      if (error) {
+        console.error('Erro ao atualizar nome personalizado do poste:', error);
+        throw error;
+      }
+
+      console.log(`✅ Nome personalizado atualizado com sucesso`);
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          posts: prev.posts.map(post =>
+            post.id === postId ? { ...post, custom_name: customName, name: customName } : post
+          )
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar nome personalizado do poste:', error);
+      throw error;
+    }
+  };
+
+  const updatePostCounter = async (postId: string, newCounter: number) => {
+    try {
+      console.log(`🔄 Atualizando contador do poste ${postId}: ${newCounter}`);
+
+      // Validar que o contador seja um número positivo
+      if (newCounter < 1) {
+        throw new Error('O contador deve ser maior que 0');
+      }
+
+      const { error } = await supabase
+        .from('budget_posts')
+        .update({
+          counter: newCounter
+        })
+        .eq('id', postId);
+
+      if (error) {
+        console.error('Erro ao atualizar contador do poste:', error);
+        throw error;
+      }
+
+      console.log(`✅ Contador atualizado com sucesso`);
+
+      // Atualizar o estado budgetDetails localmente
+      setBudgetDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          posts: prev.posts.map(post =>
+            post.id === postId ? { ...post, counter: newCounter } : post
+          )
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar contador do poste:', error);
       throw error;
     }
   };
@@ -2385,7 +2502,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       
       // Buscar templates de grupos para a empresa
-      const { data: templatesData, error: templatesError, count } = await supabase
+      const { data: templatesData, error: templatesError } = await supabase
         .from('item_group_templates')
         .select(`
           id,
@@ -2938,25 +3055,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Função centralizada para buscar todos os dados essenciais
   const fetchAllCoreData = useCallback(async () => {
-    console.log("🔄 Sincronizando todos os dados com o banco de dados...");
+    console.log("🔄 Sincronizando dados essenciais com o banco de dados...");
     setLoading(true);
     try {
-      // Buscar dados de catálogo em paralelo
+      // ⚡ OTIMIZAÇÃO: Carregar apenas dados críticos para o dashboard inicial
+      // Materiais e PostTypes serão carregados sob demanda quando necessários
       await Promise.all([
         fetchBudgets(),
-        fetchMaterials(),
-        fetchPostTypes(),
         fetchUtilityCompanies(),
         fetchFolders(),
       ]);
 
-      console.log("✅ Sincronização completa dos dados essenciais concluída");
+      console.log("✅ Sincronização dos dados essenciais concluída");
+      console.log("💡 Materiais e tipos de poste serão carregados sob demanda");
     } catch (error) {
       console.error("❌ Falha ao sincronizar dados essenciais:", error);
     } finally {
       setLoading(false);
     }
-  }, [fetchBudgets, fetchMaterials, fetchPostTypes, fetchUtilityCompanies, fetchFolders]);
+  }, [fetchBudgets, fetchUtilityCompanies, fetchFolders]);
 
   // Se não estiver inicializado ainda, mostra loading
   if (!isInitialized) {
@@ -3031,6 +3148,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addGroupToPost,
       deletePostFromBudget,
       updatePostCoordinates,
+      updatePostCustomName,
+      updatePostCounter,
       removeGroupFromPost,
       updateMaterialQuantityInPostGroup,
       removeMaterialFromPostGroup,
