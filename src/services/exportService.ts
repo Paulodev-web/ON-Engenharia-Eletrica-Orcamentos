@@ -285,3 +285,133 @@ export const exportToCSVForSuppliers = (
   URL.revokeObjectURL(url);
 };
 
+/**
+ * Interface para materiais organizados por poste/grupo
+ */
+export interface PostWithMaterials {
+  postName: string;
+  postType: string;
+  coords: { x: number; y: number };
+  groups: {
+    groupName: string;
+    materials: {
+      codigo: string;
+      nome: string;
+      unidade: string;
+      quantidade: number;
+      precoUnit: number;
+      subtotal: number;
+    }[];
+  }[];
+  looseMaterials: {
+    codigo: string;
+    nome: string;
+    unidade: string;
+    quantidade: number;
+    precoUnit: number;
+    subtotal: number;
+  }[];
+}
+
+/**
+ * Exporta os materiais organizados por poste e grupo para Excel
+ * Mantém a mesma estrutura hierárquica da área de trabalho
+ */
+export const exportByPostAndGroupToExcel = (
+  posts: PostWithMaterials[],
+  budgetName: string
+): void => {
+  const workbook = XLSX.utils.book_new();
+  
+  // Criar dados para a planilha
+  const sheetData: any[] = [];
+  
+  // Cabeçalho principal
+  sheetData.push([`ORÇAMENTO: ${budgetName}`]);
+  sheetData.push([`Data de Exportação: ${new Date().toLocaleString('pt-BR')}`]);
+  sheetData.push([]);
+  
+  let totalGeral = 0;
+  
+  // Percorrer cada poste
+  posts.forEach((post, postIndex) => {
+    // Cabeçalho do poste
+    sheetData.push([`POSTE ${postIndex + 1}: ${post.postName} - ${post.postType}`]);
+    sheetData.push([`Localização: X: ${post.coords.x}, Y: ${post.coords.y}`]);
+    sheetData.push([]);
+    
+    let totalPoste = 0;
+    
+    // Grupos de itens
+    if (post.groups.length > 0) {
+      post.groups.forEach((group) => {
+        sheetData.push([`  GRUPO: ${group.groupName}`]);
+        sheetData.push(['    Código', 'Material', 'Unidade', 'Quantidade', 'Preço Unit. (R$)', 'Subtotal (R$)']);
+        
+        group.materials.forEach((material) => {
+          sheetData.push([
+            `    ${material.codigo}`,
+            material.nome,
+            material.unidade,
+            formatarNumero(material.quantidade),
+            formatarNumero(material.precoUnit),
+            formatarNumero(material.subtotal)
+          ]);
+          totalPoste += material.subtotal;
+        });
+        
+        sheetData.push([]);
+      });
+    }
+    
+    // Materiais avulsos
+    if (post.looseMaterials.length > 0) {
+      sheetData.push([`  MATERIAIS AVULSOS`]);
+      sheetData.push(['    Código', 'Material', 'Unidade', 'Quantidade', 'Preço Unit. (R$)', 'Subtotal (R$)']);
+      
+      post.looseMaterials.forEach((material) => {
+        sheetData.push([
+          `    ${material.codigo}`,
+          material.nome,
+          material.unidade,
+          formatarNumero(material.quantidade),
+          formatarNumero(material.precoUnit),
+          formatarNumero(material.subtotal)
+        ]);
+        totalPoste += material.subtotal;
+      });
+      
+      sheetData.push([]);
+    }
+    
+    // Total do poste
+    sheetData.push(['', '', '', '', 'TOTAL DO POSTE:', formatarNumero(totalPoste)]);
+    sheetData.push([]);
+    sheetData.push([]);
+    
+    totalGeral += totalPoste;
+  });
+  
+  // Total geral
+  sheetData.push(['', '', '', '', 'TOTAL GERAL DO ORÇAMENTO:', formatarNumero(totalGeral)]);
+  
+  // Criar worksheet
+  const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+  
+  // Definir larguras das colunas
+  worksheet['!cols'] = [
+    { wch: 20 }, // Código
+    { wch: 50 }, // Material
+    { wch: 10 }, // Unidade
+    { wch: 15 }, // Quantidade
+    { wch: 18 }, // Preço Unitário
+    { wch: 18 }, // Subtotal
+  ];
+  
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Materiais por Poste');
+  
+  // Gerar arquivo e fazer download
+  const fileName = `${sanitizeFileName(budgetName)}_por_poste_${formatDateForFileName(new Date())}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+};
+

@@ -3,7 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import { CanvasVisual } from './CanvasVisual';
 import { PainelConsolidado } from './PainelConsolidado';
 import { Poste, TipoPoste, BudgetDetails, BudgetPostDetail, Material, PostMaterial } from '../types';
-import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, Search } from 'lucide-react';
+import { Trash2, Loader2, X, Check, Folder, TowerControl, Package, ArrowLeft, Eye, Search, FileSpreadsheet } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { AddPostModal } from './modals/AddPostModal';
 import { EditPostModal } from './modals/EditPostModal';
@@ -11,6 +11,7 @@ import { useAlertDialog } from '../hooks/useAlertDialog';
 import { useDebounce } from '../hooks/useDebounce';
 import { AlertDialog } from './ui/alert-dialog';
 import { getPostDisplayName } from '../lib/utils';
+import { exportByPostAndGroupToExcel, PostWithMaterials } from '../services/exportService';
 
 export function AreaTrabalho() {
   // --- INÍCIO DO BLOCO DE CÓDIGO PARA SUBSTITUIR ---
@@ -401,6 +402,62 @@ export function AreaTrabalho() {
       );
     }
   }, [clickCoordinates, currentOrcamento, addPostToBudget, addGroupToPost, addLooseMaterialToPost, materiais, alertDialog]);
+  
+  // Função para exportar materiais organizados por poste/grupo
+  const handleExportByPostAndGroup = useCallback(() => {
+    if (!budgetDetails || budgetDetails.posts.length === 0) {
+      alertDialog.showError(
+        'Nenhum Poste',
+        'Não há postes para exportar.'
+      );
+      return;
+    }
+    
+    // Organizar dados no formato necessário
+    const postsData: PostWithMaterials[] = budgetDetails.posts.map((post: any) => {
+      const postName = getPostDisplayName(post);
+      const postType = post.post_types?.name || 'Tipo não definido';
+      
+      // Organizar grupos
+      const groups = post.post_item_groups.map((group: any) => ({
+        groupName: group.name,
+        materials: group.post_item_group_materials.map((material: any) => ({
+          codigo: material.materials.code || '-',
+          nome: material.materials.name,
+          unidade: material.materials.unit,
+          quantidade: material.quantity,
+          precoUnit: material.price_at_addition,
+          subtotal: material.quantity * material.price_at_addition
+        }))
+      }));
+      
+      // Organizar materiais avulsos
+      const looseMaterials = (post.post_materials || []).map((material: any) => ({
+        codigo: material.materials.code || '-',
+        nome: material.materials.name,
+        unidade: material.materials.unit,
+        quantidade: material.quantity,
+        precoUnit: material.price_at_addition,
+        subtotal: material.quantity * material.price_at_addition
+      }));
+      
+      return {
+        postName,
+        postType,
+        coords: { x: post.x_coord, y: post.y_coord },
+        groups,
+        looseMaterials
+      };
+    });
+    
+    // Exportar para Excel
+    exportByPostAndGroupToExcel(postsData, budgetDetails.name || 'Orçamento');
+    
+    alertDialog.showSuccess(
+      'Exportação Concluída',
+      'A planilha foi exportada com sucesso!'
+    );
+  }, [budgetDetails, alertDialog]);
   // --- FIM DO BLOCO DE CÓDIGO ---
 
   if (!currentOrcamento) {
@@ -697,6 +754,7 @@ export function AreaTrabalho() {
             addLooseMaterialToPost={addLooseMaterialToPost}
             updateLooseMaterialQuantity={updateLooseMaterialQuantity}
             removeLooseMaterialFromPost={removeLooseMaterialFromPost}
+            onExportByPostAndGroup={handleExportByPostAndGroup}
           />
         </div>
 
@@ -926,6 +984,7 @@ interface PostListAccordionProps {
   addLooseMaterialToPost: (postId: string, materialId: string, quantity: number, price: number) => Promise<void>;
   updateLooseMaterialQuantity: (postMaterialId: string, newQuantity: number) => Promise<void>;
   removeLooseMaterialFromPost: (postMaterialId: string) => Promise<void>;
+  onExportByPostAndGroup: () => void;
 }
 
 function PostListAccordion({ 
@@ -943,7 +1002,8 @@ function PostListAccordion({
   materiais,
   addLooseMaterialToPost,
   updateLooseMaterialQuantity,
-  removeLooseMaterialFromPost
+  removeLooseMaterialFromPost,
+  onExportByPostAndGroup
 }: PostListAccordionProps) {
   const [isRendering, setIsRendering] = useState(false);
   const [postSearchTerm, setPostSearchTerm] = useState('');
@@ -1054,8 +1114,6 @@ function PostListAccordion({
       setRemovingLooseMaterial(null);
     }
   };
-  
-
 
   return (
     <div>
@@ -1065,9 +1123,21 @@ function PostListAccordion({
             <Folder className="h-5 w-5 text-blue-600" />
             <h3 className="text-lg font-semibold text-gray-900">Lista de Postes</h3>
           </div>
-          <span className="text-sm font-medium text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
-            {filteredPosts.length} de {postsToDisplay.length} {postsToDisplay.length === 1 ? 'poste' : 'postes'}
-          </span>
+          <div className="flex items-center space-x-2">
+            {postsToDisplay.length > 0 && (
+              <button
+                onClick={onExportByPostAndGroup}
+                className="flex items-center space-x-2 px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+                title="Exportar para Excel organizado por poste e grupo"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                <span>Exportar Excel</span>
+              </button>
+            )}
+            <span className="text-sm font-medium text-gray-600 bg-blue-100 px-3 py-1 rounded-full">
+              {filteredPosts.length} de {postsToDisplay.length} {postsToDisplay.length === 1 ? 'poste' : 'postes'}
+            </span>
+          </div>
         </div>
         
         {/* Campo de busca de postes */}
