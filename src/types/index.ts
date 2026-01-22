@@ -59,6 +59,7 @@ export interface BudgetFolder {
   name: string;
   color?: string;
   userId: string;
+  parentId?: string | null; // ID da pasta pai (null = pasta raiz)
   createdAt: string;
   updatedAt: string;
 }

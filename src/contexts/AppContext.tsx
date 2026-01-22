@@ -32,6 +32,7 @@ interface AppContextType {
   // Estados para sistema de pastas
   folders: BudgetFolder[];
   loadingFolders: boolean;
+  currentFolderId: string | null;
   
   setCurrentView: (view: string) => void;
   setCurrentOrcamento: (orcamento: Orcamento | null) => void;
@@ -85,7 +86,7 @@ interface AppContextType {
   updateUtilityCompany: (id: string, data: { name: string }) => Promise<void>;
   deleteUtilityCompany: (id: string) => Promise<void>;
   fetchItemGroups: (companyId: string) => Promise<void>;
-  addGroup: (groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => Promise<void>;
+  addGroup: (groupData: { name: string; description?: string; company_id?: string; company_ids?: string[]; materials: { material_id: string; quantity: number }[] }) => Promise<void>;
   updateGroup: (groupId: string, groupData: { name: string; description?: string; company_id: string; materials: { material_id: string; quantity: number }[] }) => Promise<void>;
   deleteGroup: (groupId: string) => Promise<void>;
   
@@ -96,10 +97,14 @@ interface AppContextType {
   
   // Funções para sistema de pastas
   fetchFolders: () => Promise<void>;
-  addFolder: (name: string, color?: string) => Promise<void>;
+  addFolder: (name: string, color?: string, parentId?: string | null) => Promise<void>;
   updateFolder: (id: string, name: string, color?: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
   moveBudgetToFolder: (budgetId: string, folderId: string | null) => Promise<void>;
+  moveFolderToFolder: (folderId: string, newParentId: string | null) => Promise<void>;
+  navigateToFolder: (folderId: string | null) => void;
+  getFolderPath: (folderId: string | null) => BudgetFolder[];
+  isFolderDescendant: (possibleDescendantId: string, ancestorId: string) => boolean;
   
   // Funções locais (legacy)
   addGrupoItem: (grupo: Omit<GrupoItem, 'id'>) => void;
@@ -212,6 +217,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Estados para sistema de pastas
   const [folders, setFolders] = useState<BudgetFolder[]>([]);
   const [loadingFolders, setLoadingFolders] = useState<boolean>(false);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null); // null = raiz
 
   // Efeito para inicializar o AppContext apenas após o AuthContext estar estável
   useEffect(() => {
@@ -2896,6 +2902,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: folder.id,
         name: folder.name,
         color: folder.color || undefined,
+        parentId: folder.parent_id || null,
         userId: folder.user_id,
         createdAt: folder.created_at,
         updatedAt: folder.updated_at,
@@ -2910,7 +2917,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  const addFolder = async (name: string, color?: string) => {
+  const addFolder = async (name: string, color?: string, parentId?: string | null) => {
     if (!user) {
       return;
     }
@@ -2921,6 +2928,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .insert({
           name: name.trim(),
           color: color || null,
+          parent_id: parentId || null,
           user_id: user.id,
         })
         .select()
@@ -2935,6 +2943,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: data.id,
         name: data.name,
         color: data.color || undefined,
+        parentId: data.parent_id || null,
         userId: data.user_id,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
@@ -2973,6 +2982,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: data.id,
         name: data.name,
         color: data.color || undefined,
+        parentId: data.parent_id || null,
         userId: data.user_id,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
@@ -2992,18 +3002,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       // Primeiro, mover todos os orçamentos dessa pasta para "Sem pasta"
-      const { error: updateError } = await supabase
+      const { error: updateBudgetsError } = await supabase
         .from('budgets')
         .update({ folder_id: null })
         .eq('folder_id', id)
         .eq('user_id', user.id);
 
-      if (updateError) {
-        console.error('Erro ao mover orçamentos da pasta:', updateError);
-        throw updateError;
+      if (updateBudgetsError) {
+        console.error('Erro ao mover orçamentos da pasta:', updateBudgetsError);
+        throw updateBudgetsError;
       }
 
-      // Depois, deletar a pasta
+      // Mover todas as subpastas para a pasta pai (ou raiz)
+      const folderToDelete = folders.find(f => f.id === id);
+      const { error: updateSubfoldersError } = await supabase
+        .from('budget_folders')
+        .update({ parent_id: folderToDelete?.parentId || null })
+        .eq('parent_id', id)
+        .eq('user_id', user.id);
+
+      if (updateSubfoldersError) {
+        console.error('Erro ao mover subpastas:', updateSubfoldersError);
+        throw updateSubfoldersError;
+      }
+
+      // Depois, deletar a pasta (CASCADE vai deletar as subpastas recursivamente no banco)
       const { error } = await supabase
         .from('budget_folders')
         .delete()
@@ -3020,6 +3043,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBudgets(prev => prev.map(budget => 
         budget.folderId === id ? { ...budget, folderId: null } : budget
       ));
+      
+      // Se estávamos dentro da pasta deletada, voltar para a raiz
+      if (currentFolderId === id) {
+        setCurrentFolderId(null);
+      }
     } catch (error) {
       console.error('Erro ao excluir pasta:', error);
       throw error;
@@ -3049,6 +3077,70 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ));
     } catch (error) {
       console.error('Erro ao mover orçamento:', error);
+      throw error;
+    }
+  };
+
+  // Função para navegar entre pastas
+  const navigateToFolder = (folderId: string | null) => {
+    setCurrentFolderId(folderId);
+  };
+
+  // Função auxiliar para obter o caminho (breadcrumb) da pasta atual
+  const getFolderPath = (folderId: string | null): BudgetFolder[] => {
+    if (!folderId) return [];
+    
+    const path: BudgetFolder[] = [];
+    let currentId: string | null | undefined = folderId;
+    
+    while (currentId) {
+      const folder = folders.find(f => f.id === currentId);
+      if (!folder) break;
+      
+      path.unshift(folder);
+      currentId = folder.parentId;
+    }
+    
+    return path;
+  };
+
+  // Função auxiliar para verificar se uma pasta é descendente de outra
+  const isFolderDescendant = (possibleDescendantId: string, ancestorId: string): boolean => {
+    if (possibleDescendantId === ancestorId) return true;
+    
+    const descendantPath = getFolderPath(possibleDescendantId);
+    return descendantPath.some(folder => folder.id === ancestorId);
+  };
+
+  // Função para mover pasta para dentro de outra pasta
+  const moveFolderToFolder = async (folderId: string, newParentId: string | null) => {
+    if (!user) {
+      return;
+    }
+
+    // Validação: não pode mover uma pasta para dentro de si mesma ou de suas subpastas
+    if (newParentId && isFolderDescendant(newParentId, folderId)) {
+      throw new Error('Não é possível mover uma pasta para dentro de si mesma ou de suas subpastas.');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('budget_folders')
+        .update({ parent_id: newParentId })
+        .eq('id', folderId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Erro ao mover pasta:', error);
+        throw error;
+      }
+
+      // Atualizar estado local
+      setFolders(prev => prev.map(folder => 
+        folder.id === folderId ? { ...folder, parentId: newParentId } : folder
+      ));
+    } catch (error) {
+      console.error('Erro ao mover pasta:', error);
       throw error;
     }
   };
@@ -3115,6 +3207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Estados para sistema de pastas
       folders,
       loadingFolders,
+      currentFolderId,
       
       setCurrentView,
       setCurrentOrcamento,
@@ -3183,6 +3276,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateFolder,
       deleteFolder,
       moveBudgetToFolder,
+      moveFolderToFolder,
+      navigateToFolder,
+      getFolderPath,
+      isFolderDescendant,
       
       // Funções locais (legacy)
       addGrupoItem,

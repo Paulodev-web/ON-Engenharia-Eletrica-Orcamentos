@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { X, Folder, AlertCircle } from 'lucide-react';
+import { useApp } from '../../contexts/AppContext';
 
 interface FolderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string, color?: string) => Promise<void>;
+  onSave: (name: string, color?: string, parentId?: string | null) => Promise<void>;
   initialName?: string;
   initialColor?: string;
   mode: 'create' | 'edit';
@@ -22,8 +23,10 @@ const FOLDER_COLORS = [
 ];
 
 export function FolderModal({ isOpen, onClose, onSave, initialName = '', initialColor = '#3B82F6', mode }: FolderModalProps) {
+  const { folders, currentFolderId } = useApp();
   const [name, setName] = useState(initialName);
   const [color, setColor] = useState(initialColor);
+  const [parentId, setParentId] = useState<string | null>(currentFolderId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,9 +34,10 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
     if (isOpen) {
       setName(initialName);
       setColor(initialColor);
+      setParentId(mode === 'create' ? currentFolderId : null);
       setError(null);
     }
-  }, [isOpen, initialName, initialColor]);
+  }, [isOpen, initialName, initialColor, currentFolderId, mode]);
 
   if (!isOpen) return null;
 
@@ -47,7 +51,7 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
     setError(null);
 
     try {
-      await onSave(name.trim(), color);
+      await onSave(name.trim(), color, parentId);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar pasta.');
@@ -55,6 +59,9 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
       setLoading(false);
     }
   };
+
+  // Obter lista de pastas disponíveis (excluindo a pasta atual para evitar ciclos)
+  const availableFolders = folders.filter(folder => mode === 'create' || folder.id !== initialName);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -113,6 +120,32 @@ export function FolderModal({ isOpen, onClose, onSave, initialName = '', initial
               {name.length}/50 caracteres
             </p>
           </div>
+
+          {/* Pasta Pai (apenas para criação) */}
+          {mode === 'create' && (
+            <div>
+              <label htmlFor="parent-folder" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Pasta Pai (Opcional)
+              </label>
+              <select
+                id="parent-folder"
+                value={parentId || ''}
+                onChange={(e) => setParentId(e.target.value || null)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
+                disabled={loading}
+              >
+                <option value="">Raiz (Sem pasta pai)</option>
+                {availableFolders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>
+                    {folder.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Escolha onde criar a nova pasta
+              </p>
+            </div>
+          )}
 
           {/* Cor da Pasta */}
           <div>
